@@ -28,6 +28,7 @@
     "dev": "tsc --watch",
     "demo:server": "node examples/vulnerable-server.mjs",
     "demo": "node examples/run-demo.mjs",
+    "gif": "node tools/gen-gif.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "pureimage": "^0.4.18",
     "typescript": "^5.4.0"
   }
 }

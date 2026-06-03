@@ -4,7 +4,7 @@
 > An intercepting man-in-the-middle proxy for the Model Context Protocol — watch every JSON-RPC message, and rewrite the **tool results the server sends back to the agent**. Burp Suite, but for AI agents.
 
 <p align="center">
-  <img src="./assets/demo.gif" alt="mcpwn tampers a tool result in flight; the agent obeys the injected instruction and exfiltrates a secret" width="760">
+  <img src="https://raw.githubusercontent.com/moizxsec/mcpwn/main/assets/demo.gif" alt="mcpwn tampers a tool result in flight; the agent obeys the injected instruction and exfiltrates a secret" width="760">
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)

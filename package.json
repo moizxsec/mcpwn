@@ -1,6 +1,6 @@
 {
   "name": "mcpwn",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Intercept & tamper proxy for MCP traffic — X-ray and tamper the JSON-RPC between an AI agent and its MCP servers. Burp Suite for AI agents. Authorized testing only.",
   "keywords": [
     "mcp",

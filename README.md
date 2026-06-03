@@ -3,6 +3,10 @@
 > **X-ray and tamper the traffic between an AI agent and its MCP servers.**
 > An intercepting man-in-the-middle proxy for the Model Context Protocol — watch every JSON-RPC message, and rewrite the **tool results the server sends back to the agent**. Burp Suite, but for AI agents.
 
+<p align="center">
+  <img src="./assets/demo.gif" alt="mcpwn tampers a tool result in flight; the agent obeys the injected instruction and exfiltrates a secret" width="760">
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a.svg)](https://nodejs.org)
 

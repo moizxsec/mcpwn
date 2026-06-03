@@ -198,6 +198,15 @@ Each newline-delimited JSON-RPC message is parsed, classified, and (for response
 - **v2:** Streamable HTTP + SSE transport, schema-aware argument fuzzer, payload library, interception scoping.
 - **v3:** web UI, multi-server view, baseline-diff rug-pull detector, SARIF/Markdown findings reports.
 
+## Hunting bugs
+
+[**docs/AUDITING.md**](./docs/AUDITING.md) is a playbook that maps each threat
+class to a concrete mcpwn workflow — path traversal, SSRF, command injection,
+indirect prompt injection, tool poisoning, rug pulls, and sampling abuse — plus
+a seed payload list in [`examples/payloads/`](./examples/payloads). When you
+find something, use [docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md)
+and disclose responsibly.
+
 ## Contributing
 
 Issues and PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). For anything you find against third-party MCP servers, please follow [SECURITY.md](./SECURITY.md) and disclose responsibly.

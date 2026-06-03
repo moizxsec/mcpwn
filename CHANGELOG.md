@@ -7,6 +7,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Interactive intercept mode (`-i`): hold each message and forward / drop /
+  edit (`$EDITOR`) / quick-tamper, driven from `/dev/tty` so it never collides
+  with the MCP channel. Falls back to auto-forward when no terminal is present.
 - stdio wrap-and-spawn proxy with transparent pass-through.
 - Live, direction-aware JSON-RPC logging to stderr with request/response
   correlation.

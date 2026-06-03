@@ -61,12 +61,39 @@ mcpwn wraps a **stdio** MCP server: the host launches mcpwn, mcpwn launches the 
 # Passive X-ray — watch all traffic, change nothing
 mcpwn -v -- npx -y @modelcontextprotocol/server-filesystem /tmp
 
-# Tamper — apply JSON rules to messages in flight
+# Interactive — hold every message and decide: forward / drop / edit / tamper
+mcpwn -i -- node ./my-server.js
+
+# Tamper headlessly — apply JSON rules to messages in flight
 mcpwn -r attack.json -- node ./my-server.js
 
 # Record a session log (JSONL) for later review
 mcpwn -l session.jsonl -- node ./my-server.js
 ```
+
+### Interactive intercept (the Repeater loop)
+
+With `-i`, mcpwn holds each message and waits for you on the controlling
+terminal (keyboard input comes from `/dev/tty`, so it never collides with the
+MCP channel on stdin/stdout):
+
+```
+┌─ HELD S→C tools/call #7
+│ { "jsonrpc": "2.0", "id": 7, "result": { "content": [ ... ] } }
+└─ [f]orward [d]rop [e]dit [t]amper [F]orward-all [q]uit >
+```
+
+| Key | Action |
+| --- | --- |
+| `f` | Forward the message as-is. |
+| `d` | Drop it (forward nothing). |
+| `e` | Open it in `$EDITOR` (or `nano`); edited JSON is re-validated before sending. |
+| `t` | Quick-tamper: inject a marker into a `tools/call` result. |
+| `F` | Forward this one and turn intercept off (auto-forward the rest). |
+| `q` | Quit and tear down the server. |
+
+Interactive mode needs a real terminal; when mcpwn is spawned by a GUI client
+with no tty, it logs a notice and falls back to auto-forward (rules still apply).
 
 ### Wire it into your MCP client
 
@@ -86,6 +113,7 @@ That's the only change. When you run with no rules, mcpwn is a transparent pass-
 
 | Flag | Description |
 | --- | --- |
+| `-i, --intercept` | Interactively hold each message for review (needs a terminal). |
 | `-r, --rule <file>` | Load a JSON tamper-rule file (repeatable). |
 | `-l, --log <file>` | Append a JSONL session log of all traffic. |
 | `-v, --verbose` | Pretty-print full message bodies to stderr. |
@@ -161,8 +189,8 @@ Each newline-delimited JSON-RPC message is parsed, classified, and (for response
 
 ## Roadmap
 
-- **v1 (now):** stdio proxy, live log, session log, headless tamper rules, vulnerable demo server.
-- **v1.1:** interactive hold/edit/forward/drop TUI (the Repeater experience).
+- **v1:** stdio proxy, live log, session log, headless tamper rules, vulnerable demo server.
+- **v1.1 (now):** interactive hold / edit / forward / drop / tamper (the Repeater experience).
 - **v2:** Streamable HTTP + SSE transport, schema-aware argument fuzzer, payload library, interception scoping.
 - **v3:** web UI, multi-server view, baseline-diff rug-pull detector, SARIF/Markdown findings reports.
 

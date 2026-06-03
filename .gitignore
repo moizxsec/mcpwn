@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+*.tgz
+.DS_Store
+mcpwn-session*.jsonl

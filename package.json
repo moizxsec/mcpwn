@@ -1,0 +1,40 @@
+{
+  "name": "mcpwn",
+  "version": "0.0.1",
+  "description": "Intercept & tamper proxy for MCP traffic — X-ray and tamper the JSON-RPC between an AI agent and its MCP servers. Burp Suite for AI agents. Authorized testing only.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "proxy",
+    "mitm",
+    "intercept",
+    "ai-agent",
+    "prompt-injection",
+    "pentest"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "mcpwn": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "demo:server": "node examples/vulnerable-server.mjs",
+    "demo": "node examples/run-demo.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}

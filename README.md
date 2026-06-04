@@ -52,10 +52,13 @@ The demo runs a naive agent against a bundled vulnerable server, *through* mcpwn
 ## Install
 
 ```bash
-npm install -g mcpwn        # or run ad-hoc with npx mcpwn ...
+npm install -g @moizxsec/mcpwn      # then run:  mcpwn ...
+# or ad-hoc, no install:
+npx @moizxsec/mcpwn -- npx -y @some/mcp-server
 ```
 
-Requires Node ≥ 18. No other runtime dependencies.
+The installed command is `mcpwn` (the package is published under a scope, but
+the binary name is unscoped). Requires Node ≥ 18. No other runtime dependencies.
 
 ## Usage
 

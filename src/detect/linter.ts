@@ -54,7 +54,8 @@ export class SecretInResultDetector implements Detector {
           evidence: redact(snippet(text), this.patterns),
           description:
             "A tool returned data matching a known credential format. An agent ingesting this result would learn a live secret, and it may be logged or forwarded onward.",
-          remediation: "Ensure the server never includes credentials, tokens or private keys in tool output.",
+          remediation:
+            "Ensure the server never includes credentials, tokens or private keys in tool output.",
           ts: flow.ts,
         });
       }
@@ -88,8 +89,7 @@ export class InjectionMarkerInDescriptionDetector implements Detector {
       if (!t || typeof t !== "object") continue;
       const desc = typeof t.description === "string" ? (t.description as string) : "";
       if (!desc) continue;
-      const matched =
-        RTL_CHARS.test(desc) || INJECTION_PATTERNS.some((re) => re.test(desc));
+      const matched = RTL_CHARS.test(desc) || INJECTION_PATTERNS.some((re) => re.test(desc));
       if (matched) {
         sink.add({
           id: "tool-poisoning",
@@ -101,7 +101,8 @@ export class InjectionMarkerInDescriptionDetector implements Detector {
           evidence: snippet(desc),
           description:
             "A tool description contains imperative/override phrasing or bidirectional control characters. Descriptions are fed to the agent, so this is a prompt-injection (tool-poisoning) vector.",
-          remediation: "Treat the server as untrusted; descriptions should be plain documentation, not instructions to the model.",
+          remediation:
+            "Treat the server as untrusted; descriptions should be plain documentation, not instructions to the model.",
           ts: flow.ts,
         });
       }

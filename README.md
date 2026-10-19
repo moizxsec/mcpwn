@@ -81,8 +81,9 @@ mcpwn -l session.jsonl -- node ./my-server.js
 ### Interactive intercept (the Repeater loop)
 
 With `-i`, mcpwn holds each message and waits for you on the controlling
-terminal (keyboard input comes from `/dev/tty`, so it never collides with the
-MCP channel on stdin/stdout):
+terminal (keyboard input comes from the console directly — `/dev/tty` on
+POSIX, `CONIN$`/`CONOUT$` on Windows — so it never collides with the MCP
+channel on stdin/stdout):
 
 ```
 ┌─ HELD S→C tools/call #7
@@ -120,12 +121,66 @@ That's the only change. When you run with no rules, mcpwn is a transparent pass-
 
 | Flag | Description |
 | --- | --- |
-| `-i, --intercept` | Interactively hold each message for review (needs a terminal). |
+| `-i, --intercept` | Interactively hold each message for review (needs a terminal; **stdio only**). |
 | `-r, --rule <file>` | Load a JSON tamper-rule file (repeatable). |
 | `-l, --log <file>` | Append a JSONL session log of all traffic. |
 | `-v, --verbose` | Pretty-print full message bodies to stderr. |
 | `-h, --help` | Show help. |
 | `--version` | Print version. |
+
+### Detection & reporting
+
+Passive detectors run **read-only** alongside the proxy — they never change what's forwarded, they only record findings.
+
+| Flag | Description |
+| --- | --- |
+| `--findings-out <dir>` | On exit, write `findings.json` + `findings.md` + `findings.sarif` (also enables the passive secret/poisoning linters). |
+| `--baseline <file>` | Diff each `tools/list` against a captured baseline — **rug-pull detection** (tool set / schema / description drift mid-session). |
+| `--baseline-capture <file>` | Capture the first `tools/list` to `<file>` inline while proxying. |
+| `--redact` | Mask built-in secret patterns (API keys, tokens, …) in the stderr log + JSONL. |
+| `--redact-file <file>` | Add redaction patterns, one `label=regex` per line. |
+
+### Scoping
+
+Narrow what mcpwn acts on; **out-of-scope traffic is always forwarded untouched** and hidden from the live log (so a noisy session stays readable and tamper stays surgical).
+
+| Flag | Description |
+| --- | --- |
+| `--scope-method <glob>` | Only methods matching this glob (repeatable), e.g. `tools/*`. |
+| `--scope-tool <name>` | Only `tools/call` for this tool name (repeatable). |
+| `--scope-direction c2s\|s2c` | Only this direction. |
+| `--only-tampered` | Only show messages a rule actually changed. |
+| `--scope-affects-log` | Also omit out-of-scope traffic from the `--log` JSONL. |
+
+## Subcommands & transports
+
+mcpwn also proxies **remote HTTP MCP servers** and ships a few headless helpers. All subcommands share `-r`/`-l`/`-v` plus the detection and scope flags above.
+
+```bash
+# Reverse-proxy a remote Streamable HTTP + SSE MCP server (Mcp-Session-Id,
+# Last-Event-ID and SSE event:/id: framing are preserved; interactive -i is
+# disabled for HTTP — there is no single flow to pause).
+mcpwn http --listen 127.0.0.1:8900 --upstream https://mcp.example.com/mcp \
+  -r attack.json --findings-out ./out            # --mode streamable|sse|auto
+
+# Rug-pull detection: capture the tool set once, then watch for drift
+mcpwn baseline capture --out base.json -- node ./my-server.js
+mcpwn --baseline base.json --findings-out ./out -- node ./my-server.js
+
+# Replay recorded client->server traffic through a fresh server (rules apply)
+mcpwn replay session.jsonl -- node ./my-server.js   # --only-method, --repeat <n>
+
+# Browse the bundled attack payload libraries
+mcpwn payloads list
+mcpwn payloads show path-traversal
+```
+
+| Command | Purpose |
+| --- | --- |
+| `mcpwn http --listen … --upstream …` | Streamable HTTP + SSE reverse proxy. Interactive mode disabled. |
+| `mcpwn baseline capture [--out <file>] -- <cmd>` | Record the first `tools/list` to a baseline file. |
+| `mcpwn replay <session.jsonl> -- <cmd>` | Replay recorded `client->server` traffic through a fresh server. |
+| `mcpwn payloads list` / `show <name>` | List / print the bundled payload libraries. |
 
 ## Tamper rules
 
@@ -166,9 +221,34 @@ Rules are plain JSON, loadable from any file so you can build and share payload 
 | `injectToolResult` | `tools/call` response | Inject text into `result.content[]` (indirect prompt injection). |
 | `poisonDescription` | `tools/list` response | Inject into tool `description` (tool poisoning / rug-pull). |
 | `matchReplace` | any message | Regex find/replace on the serialized JSON; result must stay valid JSON. |
+| `setArg` | `tools/call` request | Set one argument by JSON path (`a.b[0].c`) to a value, creating it if absent. |
+| `rewriteArgs` | `tools/call` request | Replace (or `"mode": "merge"` into) the whole `params.arguments` object. |
+| `fuzzArgs` | `tools/call` request | Set an argument (by path) to the next payload from an inline list or a [payload library](#hunting-bugs), cycling one per matching call. |
 | `drop` | any message | Discard the matched message (forward nothing). |
 
 A rule matches on any combination of `direction`, `method`, and `kind`; omit a field to widen the match. Set `"enabled": false` to keep a rule on the shelf.
+
+### Argument tampering (the server-side input fuzzer)
+
+`setArg`, `rewriteArgs`, and `fuzzArgs` apply **only to `client->server` `tools/call`** requests — they rewrite the *arguments the agent sends into a tool*, turning mcpwn into a live harness for path-traversal, SSRF, and injection testing of the server itself. Optionally scope any of them to one tool with `"tool": "<name>"`.
+
+```jsonc
+{
+  "rules": [
+    {
+      "name": "fuzz-read-path",
+      "direction": "client->server",
+      "method": "tools/call",
+      "action": {
+        "kind": "fuzzArgs",
+        "tool": "read_file",            // omit to hit any tool
+        "path": "path",                 // JSON path within params.arguments
+        "payloads": "path-traversal"    // bundled library, or an inline [..] array
+      }
+    }
+  ]
+}
+```
 
 ## What it tests for
 
@@ -205,10 +285,17 @@ tamper a batched server, split it upstream or open an issue.
 
 ## Roadmap
 
-- **v1:** stdio proxy, live log, session log, headless tamper rules, vulnerable demo server.
-- **v1.1 (now):** interactive hold / edit / forward / drop / tamper (the Repeater experience).
-- **v2:** Streamable HTTP + SSE transport, schema-aware argument fuzzer, payload library, interception scoping.
-- **v3:** web UI, multi-server view, baseline-diff rug-pull detector, SARIF/Markdown findings reports.
+- **v1:** stdio proxy, live log, session log, headless tamper rules, vulnerable demo server. ✅
+- **v1.1:** interactive hold / edit / forward / drop / tamper (the Repeater experience). ✅
+- **v2 (now — shipped):** ✅
+  - Streamable **HTTP + SSE transport** (`mcpwn http`), preserving `Mcp-Session-Id`/`Last-Event-ID` and SSE framing.
+  - **Argument tampering + fuzzer** (`setArg` / `rewriteArgs` / `fuzzArgs`) with a bundled **payload library**.
+  - **Interception scoping** (`--scope-*`, `--only-tampered`).
+  - **Rule-file JSON Schema + validation** with "did you mean …?" suggestions.
+  - **Baseline-diff rug-pull detector** (`--baseline`) and passive **secret/poisoning linters** with **redaction** (`--redact`).
+  - **JSON / Markdown / SARIF findings reports** (`--findings-out`).
+  - **`baseline` / `replay` / `payloads`** subcommands; cross-platform interactive TTY (`/dev/tty`, `CONIN$`/`CONOUT$`).
+- **Future:** multi-server view, richer protocol coverage. *(A web UI and TLS cert-minting MITM are explicit non-goals.)*
 
 ## Hunting bugs
 
@@ -222,7 +309,9 @@ and disclose responsibly.
 
 ## Contributing
 
-Issues and PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). For anything you find against third-party MCP servers, please follow [SECURITY.md](./SECURITY.md) and disclose responsibly.
+Issues and PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the layout, the invariants, and how to add a new rule kind or transport. For anything you find against third-party MCP servers, please follow [SECURITY.md](./SECURITY.md) and disclose responsibly.
+
+Generate the browsable **API reference** locally with `npm run docs:api` (TypeDoc → `docs/api/`, git-ignored). Zero runtime dependencies; dev tooling is ESLint + Prettier + c8 + TypeDoc (`npm run lint` / `format` / `coverage` / `docs:api`).
 
 ## License
 

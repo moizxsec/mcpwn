@@ -84,29 +84,27 @@ export class StdioTransport implements Transport {
     this.shutdown(0);
   }
 
-  private pump(
-    src: NodeJS.ReadableStream,
-    dst: NodeJS.WritableStream,
-    direction: Direction
-  ) {
+  private pump(src: NodeJS.ReadableStream, dst: NodeJS.WritableStream, direction: Direction) {
     const framer = new LineFramer();
     // Per-direction async chain: preserves forward order even when a message
     // is held for interactive review (which awaits operator input).
     let queue: Promise<void> = Promise.resolve();
     const enqueue = (raw: string) => {
-      queue = queue.then(() => this.handleLine(raw, dst, direction)).catch((err) => {
-        // Never block the wire: if handling a line fails unexpectedly, forward
-        // the original bytes untouched rather than silently dropping them (the
-        // host would otherwise hang waiting for a response that never comes).
-        this.opts.logger.error(
-          `pump failure (${direction}); forwarding raw line: ${(err as Error)?.message ?? err}`
-        );
-        try {
-          dst.write(raw + "\n");
-        } catch {
-          /* destination already gone */
-        }
-      });
+      queue = queue
+        .then(() => this.handleLine(raw, dst, direction))
+        .catch((err) => {
+          // Never block the wire: if handling a line fails unexpectedly, forward
+          // the original bytes untouched rather than silently dropping them (the
+          // host would otherwise hang waiting for a response that never comes).
+          this.opts.logger.error(
+            `pump failure (${direction}); forwarding raw line: ${(err as Error)?.message ?? err}`
+          );
+          try {
+            dst.write(raw + "\n");
+          } catch {
+            /* destination already gone */
+          }
+        });
     };
 
     src.on("data", (chunk: Buffer) => {

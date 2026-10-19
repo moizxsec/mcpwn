@@ -47,11 +47,7 @@ function toolName(flow: FlowMessage): string | undefined {
  * (pass it after rules run); it is only consulted when `onlyTampered` is set,
  * so callers gating rule execution should omit it (or clear `onlyTampered`).
  */
-export function inScope(
-  scope: Scope | undefined,
-  flow: FlowMessage,
-  applied?: string[]
-): boolean {
+export function inScope(scope: Scope | undefined, flow: FlowMessage, applied?: string[]): boolean {
   if (!scope) return true;
 
   if (scope.direction && scope.direction !== flow.direction) return false;

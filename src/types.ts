@@ -29,14 +29,24 @@ export interface FlowMessage extends RpcMessage {
 /** Actions a rule can apply to a matched message. */
 export type RuleAction =
   | { kind: "injectToolResult"; text: string; mode?: "append" | "prepend" | "replace" }
-  | { kind: "poisonDescription"; tool?: string; text: string; mode?: "append" | "prepend" | "replace" }
+  | {
+      kind: "poisonDescription";
+      tool?: string;
+      text: string;
+      mode?: "append" | "prepend" | "replace";
+    }
   | { kind: "matchReplace"; find: string; replace: string; flags?: string }
   // --- argument tampering (§3.2) — apply only to client->server tools/call ---
   /** Set a single argument (by JSON path within params.arguments) to a value,
    *  creating it if absent. `tool` optionally restricts to one tool by name. */
   | { kind: "setArg"; tool?: string; path: string; value: unknown }
   /** Replace (or merge into) the whole params.arguments object. */
-  | { kind: "rewriteArgs"; tool?: string; args: Record<string, unknown>; mode?: "replace" | "merge" }
+  | {
+      kind: "rewriteArgs";
+      tool?: string;
+      args: Record<string, unknown>;
+      mode?: "replace" | "merge";
+    }
   /** Set an argument (by path) to the next payload from a list or payload
    *  library, cycling one payload per matching call (stateful cursor). */
   | { kind: "fuzzArgs"; tool?: string; path: string; payloads: string[] | string }

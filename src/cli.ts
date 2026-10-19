@@ -10,13 +10,14 @@ import { loadPayloads, listPayloads } from "./payloads/index.js";
 import { runReplay } from "./replay.js";
 import { ArrayFindingsSink, writeFindingsDir, type FindingsSink } from "./findings.js";
 import { builtinLinters } from "./detect/linter.js";
-import { BaselineDetector, BaselineCaptureDetector, loadBaseline, captureBaseline } from "./detect/baseline.js";
-import type { Detector } from "./detect/detector.js";
 import {
-  builtinRedactPatterns,
-  loadRedactPatterns,
-  type RedactPattern,
-} from "./redact.js";
+  BaselineDetector,
+  BaselineCaptureDetector,
+  loadBaseline,
+  captureBaseline,
+} from "./detect/baseline.js";
+import type { Detector } from "./detect/detector.js";
+import { builtinRedactPatterns, loadRedactPatterns, type RedactPattern } from "./redact.js";
 import type { Scope } from "./core/scope.js";
 import type { Direction, Rule } from "./types.js";
 
@@ -284,7 +285,7 @@ export function parseHttpArgs(argv: string[]): HttpArgs {
     throw new ArgError(`unknown option "${a}" for "mcpwn http"`);
   }
 
-  if (!listen) throw new ArgError('mcpwn http: --listen host:port is required');
+  if (!listen) throw new ArgError("mcpwn http: --listen host:port is required");
   if (!upstream) throw new ArgError("mcpwn http: --upstream <url> is required");
 
   const { host, port } = parseListen(listen);
@@ -331,7 +332,9 @@ function runPayloads(args: string[]): number {
     for (const l of lines) process.stdout.write(l + "\n");
     return 0;
   }
-  process.stderr.write(`mcpwn payloads: unknown subcommand "${action}" (use "list" or "show <name>")\n`);
+  process.stderr.write(
+    `mcpwn payloads: unknown subcommand "${action}" (use "list" or "show <name>")\n`
+  );
   return 2;
 }
 

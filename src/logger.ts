@@ -100,7 +100,7 @@ export class Logger {
       // Evidence integrity: record BOTH the original line we received and the
       // exact bytes we put back on the wire (null if dropped), plus whether a
       // human hand-edited it — not just whether a rule fired.
-      const forwarded = dropped ? null : extra.forwarded ?? msg.raw;
+      const forwarded = dropped ? null : (extra.forwarded ?? msg.raw);
       const record = {
         ts: msg.ts,
         direction: msg.direction,

@@ -7,10 +7,17 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: build & test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node: [18, 20, 22]
+        # Cross-platform build + unit tests on Windows (single Node version).
+        include:
+          - os: windows-latest
+            node: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,5 +29,26 @@ jobs:
         run: npm run build
       - name: Unit tests
         run: npm test
+      # The stdio-spawn / interactive e2e needs a real controlling terminal, so
+      # it is only exercised on the POSIX runners (the integration test itself
+      # self-skips on Windows).
       - name: End-to-end demo (inject -> exfil)
+        if: runner.os != 'Windows'
         run: npm run demo
+
+  quality:
+    name: lint & coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Coverage (src/engine + src/core)
+        run: npm run coverage

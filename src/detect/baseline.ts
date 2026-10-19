@@ -126,7 +126,8 @@ export class BaselineDetector implements Detector {
           tool: name,
           description:
             "A tool not present in the trusted baseline appeared in tools/list — a server may be expanding its capabilities after the client built trust (rug pull).",
-          remediation: "Re-review the server's tool set and re-capture the baseline only if the change is expected.",
+          remediation:
+            "Re-review the server's tool set and re-capture the baseline only if the change is expected.",
           ts: flow.ts,
         });
         continue;
@@ -141,7 +142,8 @@ export class BaselineDetector implements Detector {
           tool: name,
           description:
             "A tool's input schema changed after the baseline was captured — new or altered parameters can silently redirect how the agent calls the tool.",
-          remediation: "Treat the server as untrusted until the schema change is explained; re-capture the baseline if intended.",
+          remediation:
+            "Treat the server as untrusted until the schema change is explained; re-capture the baseline if intended.",
           ts: flow.ts,
         });
       }
@@ -155,7 +157,8 @@ export class BaselineDetector implements Detector {
           tool: name,
           description:
             "A tool's description changed after the baseline was captured — descriptions steer the agent and are a classic tool-poisoning surface.",
-          remediation: "Review the new description for injected instructions; re-capture the baseline if intended.",
+          remediation:
+            "Review the new description for injected instructions; re-capture the baseline if intended.",
           ts: flow.ts,
         });
       }
@@ -192,7 +195,10 @@ interface BaselineLogger {
  */
 export class BaselineCaptureDetector implements Detector {
   private done = false;
-  constructor(private outFile: string, private logger?: BaselineLogger) {}
+  constructor(
+    private outFile: string,
+    private logger?: BaselineLogger
+  ) {}
 
   inspect(flow: FlowMessage, _sink: FindingsSink): void {
     if (this.done) return;

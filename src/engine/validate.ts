@@ -8,9 +8,7 @@ import type { Direction, MessageKind, Rule } from "../types.js";
  * is the published machine-readable mirror of these rules for editors/CI.
  */
 
-export type ValidationResult =
-  | { ok: true; rules: Rule[] }
-  | { ok: false; errors: string[] };
+export type ValidationResult = { ok: true; rules: Rule[] } | { ok: false; errors: string[] };
 
 const DIRECTIONS: Direction[] = ["client->server", "server->client"];
 const MESSAGE_KINDS: MessageKind[] = ["request", "response", "error", "notification", "unknown"];
@@ -101,7 +99,10 @@ export function validateRuleFile(data: unknown): ValidationResult {
     return { ok: false, errors: ['rule file: missing required "rules" array'] };
   }
   if (!Array.isArray(data.rules)) {
-    return { ok: false, errors: [`rule file: "rules" must be an array (got ${typeName(data.rules)})`] };
+    return {
+      ok: false,
+      errors: [`rule file: "rules" must be an array (got ${typeName(data.rules)})`],
+    };
   }
 
   const errors: string[] = [];
@@ -261,7 +262,9 @@ function optionalEnum(
   errors: string[]
 ): void {
   if (field in obj && !allowed.includes(obj[field] as string)) {
-    errors.push(`${path}.${field}: must be one of ${quoteList(allowed)} (got ${render(obj[field])})`);
+    errors.push(
+      `${path}.${field}: must be one of ${quoteList(allowed)} (got ${render(obj[field])})`
+    );
   }
 }
 

@@ -101,9 +101,7 @@ export class MessagePipeline {
       try {
         d.inspect(flow, sink);
       } catch (err) {
-        this.opts.logger.error(
-          `detector threw (${(err as Error)?.message ?? err}); ignoring`
-        );
+        this.opts.logger.error(`detector threw (${(err as Error)?.message ?? err}); ignoring`);
       }
     }
   }

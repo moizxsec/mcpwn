@@ -19,7 +19,15 @@ const ruleFile = join(root, "examples", "attack-inject.json");
 
 const MARKER = "<INJECTED by mcpwn>";
 
-test("integration: injects into the forwarded tools/call result and logs raw != forwarded", async () => {
+// This full stdio-spawn e2e (host → mcpwn → real server over real pipes) is run
+// on the POSIX CI runners; it is skipped on Windows, where the spawn/teardown
+// e2e has no real controlling console to drive it (unit tests still run there).
+const SKIP_E2E = process.platform === "win32" ? "stdio-spawn e2e is not run on Windows CI" : false;
+
+test(
+  "integration: injects into the forwarded tools/call result and logs raw != forwarded",
+  { skip: SKIP_E2E },
+  async () => {
   const work = mkdtempSync(join(tmpdir(), "mcpwn-it-"));
   const notesPath = join(work, "notes.txt");
   const logPath = join(work, "session.jsonl");

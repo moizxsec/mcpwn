@@ -11,6 +11,9 @@ export interface ControllingTty {
 /** Seam for tests: the shape of `node:fs`'s `openSync` we depend on. */
 export type OpenFn = (path: string, flags: string) => number;
 
+/** Seam for tests: the shape of `node:fs`'s `closeSync` we depend on. */
+export type CloseFn = (fd: number) => void;
+
 /**
  * Open the operator's controlling terminal for interactive use, independent of
  * stdin/stdout (which carry the MCP protocol and must stay byte-clean —
@@ -24,12 +27,15 @@ export type OpenFn = (path: string, flags: string) => number;
  * was spawned by a GUI client with no attached console. Callers must then
  * degrade gracefully to auto-forward rather than trapping the wire.
  *
- * `open`/`plat` are injectable so the return-shape can be unit-tested without a
- * real console (interactive end-to-end testing stays manual).
+ * `open`/`close`/`plat` are injectable so the return-shape can be unit-tested
+ * without a real console (interactive end-to-end testing stays manual). Tests
+ * MUST inject `close` too — otherwise the real `closeSync` would act on the
+ * fake fd numbers the fake `open` returns, closing live descriptors.
  */
 export function openControllingTty(
   open: OpenFn = openSync,
-  plat: NodeJS.Platform = process.platform
+  plat: NodeJS.Platform = process.platform,
+  close: CloseFn = closeSync
 ): ControllingTty | null {
   const [readPath, writePath] =
     plat === "win32" ? ["\\\\.\\CONIN$", "\\\\.\\CONOUT$"] : ["/dev/tty", "/dev/tty"];
@@ -43,7 +49,7 @@ export function openControllingTty(
     // Don't leak the read fd if opening the write side failed.
     if (rfd >= 0) {
       try {
-        closeSync(rfd);
+        close(rfd);
       } catch {
         /* best effort */
       }

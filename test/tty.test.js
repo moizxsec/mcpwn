@@ -54,8 +54,13 @@ test("openControllingTty: returns null when only the write side fails (no fd lea
     if (n === 1) return 7; // read side opens
     throw new Error("EACCES"); // write side fails
   };
-  const res = openControllingTty(fakeOpen, "linux");
+  // Inject the close seam too: without it the real closeSync would run on the
+  // fake fd (7), closing a live descriptor and aborting the process on Node 22.
+  const closed = [];
+  const fakeClose = (fd) => closed.push(fd);
+  const res = openControllingTty(fakeOpen, "linux", fakeClose);
   assert.equal(res, null);
+  assert.deepEqual(closed, [7], "the opened read fd must be closed on write failure");
 });
 
 // Only meaningful with a real controlling terminal. Headless CI has none, and

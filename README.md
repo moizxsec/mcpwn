@@ -215,7 +215,8 @@ tamper a batched server, split it upstream or open an issue.
 [**docs/AUDITING.md**](./docs/AUDITING.md) is a playbook that maps each threat
 class to a concrete mcpwn workflow — path traversal, SSRF, command injection,
 indirect prompt injection, tool poisoning, rug pulls, and sampling abuse — plus
-a seed payload list in [`examples/payloads/`](./examples/payloads). When you
+the bundled payload libraries in [`payloads/`](./payloads) (list them with
+`mcpwn payloads list`, print one with `mcpwn payloads show <name>`). When you
 find something, use [docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md)
 and disclose responsibly.
 

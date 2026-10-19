@@ -35,6 +35,10 @@
       "type": "string",
       "enum": ["append", "prepend", "replace"]
     },
+    "rewriteMode": {
+      "type": "string",
+      "enum": ["replace", "merge"]
+    },
     "action": {
       "type": "object",
       "required": ["kind"],
@@ -66,6 +70,41 @@
             "find": { "type": "string" },
             "replace": { "type": "string" },
             "flags": { "type": "string" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "path", "value"],
+          "properties": {
+            "kind": { "const": "setArg" },
+            "tool": { "type": "string" },
+            "path": { "type": "string" },
+            "value": {}
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "args"],
+          "properties": {
+            "kind": { "const": "rewriteArgs" },
+            "tool": { "type": "string" },
+            "args": { "type": "object" },
+            "mode": { "$ref": "#/$defs/rewriteMode" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "path", "payloads"],
+          "properties": {
+            "kind": { "const": "fuzzArgs" },
+            "tool": { "type": "string" },
+            "path": { "type": "string" },
+            "payloads": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            }
           }
         },
         {

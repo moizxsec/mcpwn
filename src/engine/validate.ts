@@ -14,8 +14,17 @@ export type ValidationResult =
 
 const DIRECTIONS: Direction[] = ["client->server", "server->client"];
 const MESSAGE_KINDS: MessageKind[] = ["request", "response", "error", "notification", "unknown"];
-const ACTION_KINDS = ["injectToolResult", "poisonDescription", "matchReplace", "drop"] as const;
+const ACTION_KINDS = [
+  "injectToolResult",
+  "poisonDescription",
+  "matchReplace",
+  "setArg",
+  "rewriteArgs",
+  "fuzzArgs",
+  "drop",
+] as const;
 const MODES = ["append", "prepend", "replace"];
+const REWRITE_MODES = ["replace", "merge"];
 
 /** Allowed keys per rule and per action kind — used for typo detection. */
 const RULE_FIELDS = ["name", "enabled", "direction", "method", "kind", "action"];
@@ -23,6 +32,9 @@ const ACTION_FIELDS: Record<string, string[]> = {
   injectToolResult: ["kind", "text", "mode"],
   poisonDescription: ["kind", "tool", "text", "mode"],
   matchReplace: ["kind", "find", "replace", "flags"],
+  setArg: ["kind", "tool", "path", "value"],
+  rewriteArgs: ["kind", "tool", "args", "mode"],
+  fuzzArgs: ["kind", "tool", "path", "payloads"],
   drop: ["kind"],
 };
 
@@ -182,6 +194,21 @@ function validateAction(action: unknown, path: string, errors: string[]): void {
       requireString(action, "replace", path, errors);
       optionalString(action, "flags", path, errors);
       break;
+    case "setArg":
+      requireString(action, "path", path, errors);
+      optionalString(action, "tool", path, errors);
+      requirePresent(action, "value", path, errors);
+      break;
+    case "rewriteArgs":
+      requireObject(action, "args", path, errors);
+      optionalString(action, "tool", path, errors);
+      optionalEnum(action, "mode", REWRITE_MODES, path, errors);
+      break;
+    case "fuzzArgs":
+      requireString(action, "path", path, errors);
+      optionalString(action, "tool", path, errors);
+      requirePayloads(action, path, errors);
+      break;
     case "drop":
       // No further fields.
       break;
@@ -224,6 +251,55 @@ function optionalMode(obj: Record<string, unknown>, path: string, errors: string
   if ("mode" in obj && !MODES.includes(obj.mode as string)) {
     errors.push(`${path}.mode: must be one of ${quoteList(MODES)} (got ${render(obj.mode)})`);
   }
+}
+
+function optionalEnum(
+  obj: Record<string, unknown>,
+  field: string,
+  allowed: readonly string[],
+  path: string,
+  errors: string[]
+): void {
+  if (field in obj && !allowed.includes(obj[field] as string)) {
+    errors.push(`${path}.${field}: must be one of ${quoteList(allowed)} (got ${render(obj[field])})`);
+  }
+}
+
+/** A field that must be present, of any JSON type (e.g. setArg.value). */
+function requirePresent(
+  obj: Record<string, unknown>,
+  field: string,
+  path: string,
+  errors: string[]
+): void {
+  if (!(field in obj)) errors.push(`${path}: missing required "${field}"`);
+}
+
+function requireObject(
+  obj: Record<string, unknown>,
+  field: string,
+  path: string,
+  errors: string[]
+): void {
+  if (!(field in obj)) {
+    errors.push(`${path}: missing required "${field}"`);
+  } else if (!isPlainObject(obj[field])) {
+    errors.push(`${path}.${field}: must be an object (got ${typeName(obj[field])})`);
+  }
+}
+
+/** fuzzArgs.payloads: a payload-library name (string) or an array of strings. */
+function requirePayloads(obj: Record<string, unknown>, path: string, errors: string[]): void {
+  if (!("payloads" in obj)) {
+    errors.push(`${path}: missing required "payloads"`);
+    return;
+  }
+  const p = obj.payloads;
+  if (typeof p === "string") return;
+  if (Array.isArray(p) && p.every((x) => typeof x === "string")) return;
+  errors.push(
+    `${path}.payloads: must be a string (payload-library name) or an array of strings (got ${typeName(p)})`
+  );
 }
 
 function quoteList(items: readonly string[]): string {

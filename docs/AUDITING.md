@@ -88,7 +88,8 @@ result the agent ingests, then observe whether the agent acts on it.
 mcpwn -r examples/attack-inject.json -- npx -y <target>
 ```
 
-See `examples/payloads/prompt-injection.txt` for a seed wordlist. The finding
+See `payloads/prompt-injection.txt` for a seed wordlist (or `mcpwn payloads show
+prompt-injection`). The finding
 is **"the agent obeys instructions found in tool output"** — demonstrate it by
 getting the agent to call a sensitive tool it shouldn't.
 

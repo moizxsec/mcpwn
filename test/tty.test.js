@@ -1,0 +1,87 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { closeSync } from "node:fs";
+import { openControllingTty } from "../dist/engine/tty.js";
+
+// The return-shape of openControllingTty is unit-tested by injecting a fake
+// `openSync` + platform, so no real console is required (interactive end-to-end
+// behaviour stays a manual check).
+
+test("openControllingTty: POSIX opens /dev/tty read + write and returns both fds", () => {
+  const calls = [];
+  let fd = 10;
+  const fakeOpen = (path, flags) => {
+    calls.push([path, flags]);
+    return fd++;
+  };
+  const res = openControllingTty(fakeOpen, "linux");
+  assert.deepEqual(res, { rfd: 10, wfd: 11 });
+  assert.deepEqual(calls, [
+    ["/dev/tty", "r"],
+    ["/dev/tty", "w"],
+  ]);
+});
+
+test("openControllingTty: Windows opens CONIN$/CONOUT$ console devices", () => {
+  const calls = [];
+  let fd = 3;
+  const fakeOpen = (path, flags) => {
+    calls.push([path, flags]);
+    return fd++;
+  };
+  const res = openControllingTty(fakeOpen, "win32");
+  assert.ok(res, "should return a descriptor pair");
+  assert.equal(res.rfd, 3);
+  assert.equal(res.wfd, 4);
+  assert.match(calls[0][0], /CONIN\$$/);
+  assert.equal(calls[0][1], "r");
+  assert.match(calls[1][0], /CONOUT\$$/);
+  assert.equal(calls[1][1], "w");
+});
+
+test("openControllingTty: returns null when the terminal cannot be opened (headless)", () => {
+  const fakeOpen = () => {
+    throw new Error("ENXIO: no such device or address");
+  };
+  const res = openControllingTty(fakeOpen, "linux");
+  assert.equal(res, null);
+});
+
+test("openControllingTty: returns null when only the write side fails (no fd leak path)", () => {
+  let n = 0;
+  const fakeOpen = () => {
+    n++;
+    if (n === 1) return 7; // read side opens
+    throw new Error("EACCES"); // write side fails
+  };
+  // Inject the close seam too: without it the real closeSync would run on the
+  // fake fd (7), closing a live descriptor and aborting the process on Node 22.
+  const closed = [];
+  const fakeClose = (fd) => closed.push(fd);
+  const res = openControllingTty(fakeOpen, "linux", fakeClose);
+  assert.equal(res, null);
+  assert.deepEqual(closed, [7], "the opened read fd must be closed on write failure");
+});
+
+// Only meaningful with a real controlling terminal. Headless CI has none, and
+// opening the real console device there can abort the process on some Node
+// versions, so skip it when no tty is attached — the mocked tests above already
+// cover the logic on both platforms.
+const hasTty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+test(
+  "openControllingTty: defaults are callable (real openSync + current platform)",
+  { skip: hasTty ? false : "no controlling tty in this environment" },
+  () => {
+  // On a real console it returns a descriptor pair; it must not throw.
+  const res = openControllingTty();
+  assert.ok(res === null || (typeof res.rfd === "number" && typeof res.wfd === "number"));
+  if (res) {
+    // Clean up any real fds we opened.
+    try {
+      closeSync(res.rfd);
+      closeSync(res.wfd);
+    } catch {
+      /* best effort */
+    }
+  }
+});

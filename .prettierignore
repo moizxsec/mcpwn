@@ -1,0 +1,7 @@
+dist/
+docs/api/
+coverage/
+node_modules/
+package-lock.json
+assets/
+*.tgz

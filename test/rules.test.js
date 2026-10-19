@@ -212,3 +212,23 @@ test("a throwing rule does not block later rules from applying", () => {
   assert.deepEqual(r.applied, ["inj"]);
   assert.equal(errors.length, 1);
 });
+
+// --- applyAction default throw (Invariant #8) ---------------------------
+
+test("an unknown action kind throws in applyAction but is caught, logged, and forwarded untampered", () => {
+  const original = { jsonrpc: "2.0", id: 1, result: "safe" };
+  const msg = flow(original);
+  const { errors, logger } = captureLogger();
+  let r;
+  assert.doesNotThrow(() => {
+    // A kind that no case handles -> applyAction hits `default:` and throws.
+    r = applyRules([{ name: "weird", action: { kind: "doesNotExist" } }], msg, logger);
+  });
+  assert.notEqual(r.json, null); // NOT dropped — the wire is never blocked
+  assert.equal(r.changed, false);
+  assert.deepEqual(r.applied, []);
+  assert.deepEqual(r.json, original); // message intact (rollback)
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /weird/);
+  assert.match(errors[0], /unknown action kind: doesNotExist/);
+});

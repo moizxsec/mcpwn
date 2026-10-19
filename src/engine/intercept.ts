@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { openSync, closeSync, readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { closeSync, readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as tty from "node:tty";
+import { openControllingTty } from "./tty.js";
 import { serialize } from "./parser.js";
 import type { FlowMessage } from "../types.js";
 
@@ -16,9 +17,11 @@ export interface ReviewDecision {
  * Interactive hold/forward/drop/edit controller — the "Repeater" loop.
  *
  * stdin/stdout are the MCP channel, so the operator's keyboard and the UI
- * must use the controlling terminal (/dev/tty) directly. When there is no
- * tty (e.g. the proxy was spawned by a GUI client), interactive mode is
- * unavailable and the caller falls back to auto-forward.
+ * must use the controlling terminal directly (`/dev/tty` on POSIX, the
+ * `CONIN$`/`CONOUT$` console devices on Windows — see {@link openControllingTty}).
+ * When there is no controlling terminal (e.g. the proxy was spawned by a GUI
+ * client), interactive mode is unavailable and the caller falls back to
+ * auto-forward.
  *
  * Reviews are serialized through a single promise chain so only one prompt
  * is ever on screen; messages keep their per-direction arrival order.
@@ -29,24 +32,39 @@ export class InterceptController {
   private rfd = -1;
   private chain: Promise<void> = Promise.resolve();
   private holding = true;
+  /** Only true between start() and stop(); the controller is now shared with
+   *  the pipeline, so a controller that was never started (no /dev/tty, so the
+   *  transport skipped start()) must report shouldHold()=false and stay inert. */
+  private started = false;
 
   constructor(private enabledInitially: boolean) {}
 
-  /** True if a controlling terminal is usable for interaction. */
+  /** True if a controlling terminal is usable for interaction (cross-platform). */
   available(): boolean {
+    const term = openControllingTty();
+    if (!term) return false;
     try {
-      const fd = openSync("/dev/tty", "r");
-      closeSync(fd);
-      return true;
+      closeSync(term.rfd);
+      closeSync(term.wfd);
     } catch {
-      return false;
+      /* best effort */
     }
+    return true;
   }
 
   start() {
+    const term = openControllingTty();
+    if (!term) {
+      // No controlling terminal (should be pre-checked via available(), but stay
+      // safe): never start holding, so shouldHold() stays false and the pipeline
+      // auto-forwards instead of trapping messages.
+      this.started = false;
+      return;
+    }
+    this.started = true;
     this.holding = this.enabledInitially;
-    this.rfd = openSync("/dev/tty", "r");
-    this.wfd = openSync("/dev/tty", "w");
+    this.rfd = term.rfd;
+    this.wfd = term.wfd;
     this.rs = new tty.ReadStream(this.rfd);
     if (this.rs.isTTY) this.rs.setRawMode(true);
     this.rs.resume();
@@ -60,6 +78,7 @@ export class InterceptController {
   }
 
   stop() {
+    this.started = false;
     try {
       if (this.rs?.isTTY) this.rs.setRawMode(false);
       this.rs?.destroy();
@@ -78,9 +97,11 @@ export class InterceptController {
     }
   }
 
-  /** Whether a message should currently be held for review. */
+  /** Whether a message should currently be held for review. False until the
+   *  controller is started (and again after it stops), so an unavailable /
+   *  torn-down controller never traps a message in the pipeline. */
   shouldHold(): boolean {
-    return this.holding;
+    return this.started && this.holding;
   }
 
   /**

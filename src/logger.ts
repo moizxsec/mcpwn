@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import type { FlowMessage } from "./types.js";
+import { redact, type RedactPattern } from "./redact.js";
 
 /**
  * All human-facing output goes to STDERR. stdout/stdin are the MCP channel
@@ -25,6 +26,10 @@ export interface LoggerOptions {
   logFile?: string;
   /** Print full pretty-printed bodies, not just a one-line summary. */
   verbose?: boolean;
+  /** Secret-redaction patterns (§3.9). When set, matches are masked in BOTH the
+   *  stderr display and the JSONL raw/forwarded fields. Redaction NEVER touches
+   *  the bytes forwarded on the wire — it is a logging concern only. */
+  redactPatterns?: RedactPattern[];
 }
 
 export interface MessageLogExtra {
@@ -34,6 +39,11 @@ export interface MessageLogExtra {
   forwarded?: string | null;
   /** True when the operator hand-edited the message in interactive mode. */
   manualEdit?: boolean;
+  /** Suppress the human stderr line (out-of-scope traffic, §3.6). The JSONL
+   *  record is still written unless `skipRecord` is also set. */
+  quiet?: boolean;
+  /** Skip the JSONL session record entirely (--scope-affects-log). */
+  skipRecord?: boolean;
 }
 
 export class Logger {
@@ -41,6 +51,12 @@ export class Logger {
 
   private write(line: string) {
     process.stderr.write(line + "\n");
+  }
+
+  /** Apply secret redaction when configured; a no-op otherwise. */
+  private mask(text: string): string {
+    const pats = this.opts.redactPatterns;
+    return pats && pats.length ? redact(text, pats) : text;
   }
 
   banner(childCmd: string, ruleCount: number) {
@@ -53,32 +69,38 @@ export class Logger {
 
   message(msg: FlowMessage, applied: string[], dropped: boolean, extra: MessageLogExtra = {}) {
     const manualEdit = extra.manualEdit ?? false;
-    const method = msg.method ?? msg.correlatedMethod ?? dim("(" + msg.kind + ")");
-    const id = msg.id !== undefined ? dim(`#${JSON.stringify(msg.id)}`) : "";
-    let tag = "";
-    if (dropped) {
-      tag = " " + red("[DROPPED]");
-    } else {
-      const parts: string[] = [];
-      if (applied.length) parts.push(`tampered: ${applied.join(",")}`);
-      if (manualEdit) parts.push("edited");
-      if (parts.length) tag = " " + yellow(`[${parts.join(" ")}]`);
+
+    // Out-of-scope traffic (§3.6): suppress the human stderr line but still keep
+    // the evidence trail in the JSONL log unless the operator opted out.
+    if (!extra.quiet) {
+      const method = msg.method ?? msg.correlatedMethod ?? dim("(" + msg.kind + ")");
+      const id = msg.id !== undefined ? dim(`#${JSON.stringify(msg.id)}`) : "";
+      let tag = "";
+      if (dropped) {
+        tag = " " + red("[DROPPED]");
+      } else {
+        const parts: string[] = [];
+        if (applied.length) parts.push(`tampered: ${applied.join(",")}`);
+        if (manualEdit) parts.push("edited");
+        if (parts.length) tag = " " + yellow(`[${parts.join(" ")}]`);
+      }
+
+      this.write(`${arrow(msg.direction)} ${bold(String(method))} ${id}${tag}`);
+
+      if (this.opts.verbose && msg.json) {
+        const pretty = this.mask(JSON.stringify(msg.json, null, 2))
+          .split("\n")
+          .map((l) => dim("  │ ") + l)
+          .join("\n");
+        this.write(pretty);
+      }
     }
 
-    this.write(`${arrow(msg.direction)} ${bold(String(method))} ${id}${tag}`);
-
-    if (this.opts.verbose && msg.json) {
-      const pretty = JSON.stringify(msg.json, null, 2)
-        .split("\n")
-        .map((l) => dim("  │ ") + l)
-        .join("\n");
-      this.write(pretty);
-    }
-
-    if (this.opts.logFile) {
+    if (this.opts.logFile && !extra.skipRecord) {
       // Evidence integrity: record BOTH the original line we received and the
       // exact bytes we put back on the wire (null if dropped), plus whether a
       // human hand-edited it — not just whether a rule fired.
+      const forwarded = dropped ? null : (extra.forwarded ?? msg.raw);
       const record = {
         ts: msg.ts,
         direction: msg.direction,
@@ -88,8 +110,10 @@ export class Logger {
         applied,
         dropped,
         manualEdit,
-        raw: msg.raw,
-        forwarded: dropped ? null : extra.forwarded ?? msg.raw,
+        // Redaction (§3.9) masks secrets in the stored evidence too, so a
+        // session log never persists a live credential.
+        raw: this.mask(msg.raw),
+        forwarded: forwarded === null ? null : this.mask(forwarded),
       };
       try {
         appendFileSync(this.opts.logFile, JSON.stringify(record) + "\n");

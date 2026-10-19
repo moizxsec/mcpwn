@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
-import type { FlowMessage, Rule, RuleAction, RuleFile } from "../types.js";
+import type { Direction, FlowMessage, Rule, RuleAction } from "../types.js";
+import { validateRuleFile } from "./validate.js";
+import { setPath } from "./jsonpath.js";
+import { loadPayloads } from "../payloads/index.js";
 
 export interface RuleResult {
   /** The (possibly rewritten) JSON to forward, or null to DROP the message. */
@@ -9,6 +12,34 @@ export interface RuleResult {
   changed: boolean;
 }
 
+/**
+ * Per-rule fuzz cursors (§3.2). `fuzzArgs` emits one payload per matching call,
+ * so it needs state that survives across messages. That state lives here — in a
+ * pipeline-owned instance threaded into {@link applyRules} — rather than in a
+ * module global, so two concurrent pipelines never share a cursor.
+ */
+export class FuzzState {
+  private cursors = new Map<string, number>();
+
+  /** Return this rule's current cursor and advance it. Call exactly once per
+   *  payload actually consumed (only when the action truly applies). */
+  next(key: string): number {
+    const c = this.cursors.get(key) ?? 0;
+    this.cursors.set(key, c + 1);
+    return c;
+  }
+}
+
+/** Collaborators an action needs beyond the message JSON: the flow's method +
+ *  direction (so argument-tampering actions can self-gate to client->server
+ *  tools/call) and a cursor advance for fuzzArgs. */
+interface ApplyContext {
+  direction: Direction;
+  method?: string;
+  /** Advance and return this rule's fuzz cursor. */
+  nextFuzzIndex: () => number;
+}
+
 /** Minimal logging surface used for rule-failure reporting; the real Logger
  *  satisfies it. Kept narrow so the rules engine stays easy to test. */
 export interface RuleLogger {
@@ -16,11 +47,13 @@ export interface RuleLogger {
 }
 
 export function loadRules(path: string): Rule[] {
-  const data = JSON.parse(readFileSync(path, "utf8")) as RuleFile;
-  if (!data || !Array.isArray(data.rules)) {
-    throw new Error(`Rule file ${path} has no "rules" array`);
+  const data = JSON.parse(readFileSync(path, "utf8"));
+  const result = validateRuleFile(data);
+  if (!result.ok) {
+    // Surface every problem at once; the CLI logs this and exits 2.
+    throw new Error(`invalid rule file:\n  - ${result.errors.join("\n  - ")}`);
   }
-  return data.rules;
+  return result.rules;
 }
 
 /** Does this rule apply to the given flow message? */
@@ -47,8 +80,37 @@ function applyText(original: string, text: string, mode: string | undefined): st
   }
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/** Argument-tampering actions apply ONLY to a client->server tools/call. */
+function isToolCall(ctx: ApplyContext): boolean {
+  return ctx.direction === "client->server" && ctx.method === "tools/call";
+}
+
+/** An optional `tool` filter matches against params.name. No filter = any. */
+function toolMatches(tool: string | undefined, json: any): boolean {
+  if (tool === undefined) return true;
+  return json?.params?.name === tool;
+}
+
+/** Ensure json.params.arguments is an object and return it, creating as needed. */
+function ensureArgs(json: any): Record<string, unknown> {
+  if (!isPlainObject(json.params)) json.params = {};
+  if (!isPlainObject((json.params as any).arguments)) (json.params as any).arguments = {};
+  return (json.params as any).arguments as Record<string, unknown>;
+}
+
+/** Resolve a fuzz payload reference to a concrete list: an inline array is used
+ *  as-is; a string names a payload library (bundled or on-disk). */
+function resolvePayloads(payloads: string[] | string): string[] {
+  if (Array.isArray(payloads)) return payloads;
+  return loadPayloads(payloads);
+}
+
 /** Apply a single action in-place to the message JSON. Returns true if changed. */
-function applyAction(action: RuleAction, json: any): boolean {
+function applyAction(action: RuleAction, json: any, ctx: ApplyContext): boolean {
   switch (action.kind) {
     case "drop":
       return true; // signalled separately by caller
@@ -108,6 +170,51 @@ function applyAction(action: RuleAction, json: any): boolean {
       }
       return changed;
     }
+
+    case "setArg": {
+      // Argument tampering is scoped to client->server tools/call; anything
+      // else is a silent no-op (like the other filtered actions).
+      if (!isToolCall(ctx) || !toolMatches(action.tool, json)) return false;
+      const args = ensureArgs(json);
+      setPath(args, action.path, action.value);
+      return true;
+    }
+
+    case "rewriteArgs": {
+      if (!isToolCall(ctx) || !toolMatches(action.tool, json)) return false;
+      if (!isPlainObject(json.params)) json.params = {};
+      if (action.mode === "merge") {
+        const cur = isPlainObject((json.params as any).arguments)
+          ? ((json.params as any).arguments as Record<string, unknown>)
+          : {};
+        (json.params as any).arguments = { ...cur, ...action.args };
+      } else {
+        (json.params as any).arguments = { ...action.args };
+      }
+      return true;
+    }
+
+    case "fuzzArgs": {
+      if (!isToolCall(ctx) || !toolMatches(action.tool, json)) return false;
+      // Resolve BEFORE advancing the cursor so an unknown payload library throws
+      // (and the rule rolls back) without burning a payload slot.
+      const payloads = resolvePayloads(action.payloads);
+      if (payloads.length === 0) return false;
+      const idx = ctx.nextFuzzIndex();
+      const payload = payloads[idx % payloads.length];
+      const args = ensureArgs(json);
+      setPath(args, action.path, payload);
+      return true;
+    }
+
+    default: {
+      // Unreachable for well-formed rules (the loader validates kinds), but an
+      // unknown kind must FAIL LOUD here rather than silently no-op: the per-rule
+      // try/catch in applyRules turns this throw into a logged error and forwards
+      // the message untampered, so the wire is never blocked (NFR-8).
+      const kind = (action as { kind?: unknown }).kind;
+      throw new Error(`unknown action kind: ${String(kind)}`);
+    }
   }
 }
 
@@ -120,7 +227,12 @@ function applyAction(action: RuleAction, json: any): boolean {
  * is rolled back, and the message is forwarded UNtampered for that rule. Only
  * an explicit `drop` action stops forwarding.
  */
-export function applyRules(rules: Rule[], msg: FlowMessage, logger?: RuleLogger): RuleResult {
+export function applyRules(
+  rules: Rule[],
+  msg: FlowMessage,
+  logger?: RuleLogger,
+  fuzz?: FuzzState
+): RuleResult {
   if (!msg.json) return { json: msg.json, applied: [], changed: false };
 
   // Deep clone so an aborted/partial mutation never corrupts the raw record.
@@ -134,11 +246,19 @@ export function applyRules(rules: Rule[], msg: FlowMessage, logger?: RuleLogger)
       return { json: null, applied: [...applied, rule.name], changed: true };
     }
 
+    const ctx: ApplyContext = {
+      direction: msg.direction,
+      method: msg.method,
+      // Cursor keyed per rule name; falls back to 0 when no state is threaded
+      // (e.g. a unit test), so a stateless caller always gets the first payload.
+      nextFuzzIndex: () => (fuzz ? fuzz.next(rule.name) : 0),
+    };
+
     // Snapshot before the (mutating) action so a throw rolls back cleanly.
     const snapshot = JSON.stringify(json);
     let did = false;
     try {
-      did = applyAction(rule.action, json);
+      did = applyAction(rule.action, json, ctx);
     } catch (err) {
       // Restore the pre-rule state in place (keep the same object identity so
       // later rules and the caller see an intact message), then carry on.

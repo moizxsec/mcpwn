@@ -192,7 +192,16 @@ AFTER:    host ──stdin/stdout──►  mcpwn  ──stdin/stdout──►  
                           parse → correlate → rules → log → forward
 ```
 
-Each newline-delimited JSON-RPC message is parsed, classified, and (for responses) tagged with its originating method via id-correlation. Rules run against the result; the message is forwarded as-is, rewritten, or dropped. Anything that can't be parsed is relayed opaquely — mcpwn never blocks or mangles the wire.
+Each newline-delimited JSON-RPC message is parsed, classified, and tagged with its originating method via id-correlation. Correlation is **bidirectional**: the client's requests (`tools/call`, `tools/list`, …) and the server's own requests (`sampling/createMessage`, `roots/list`, `elicitation/create`) are both tracked, keyed by `(direction, id)` so their independent id-spaces never collide. Rules run against the result; the message is forwarded as-is, rewritten, or dropped. Anything that can't be parsed is relayed opaquely — mcpwn never blocks or mangles the wire.
+
+### Batched messages
+
+JSON-RPC 2.0 allows a **batch** — an array of messages on a single line. mcpwn
+does **not** classify, correlate, or tamper batch elements individually: a batch
+is relayed **opaquely** (logged with `kind: "unknown"`, forwarded byte-for-byte),
+so rules do not currently apply inside a batch. This is deliberate — batches are
+rare in MCP and were removed in the 2025-06-18 spec revision. If you need to
+tamper a batched server, split it upstream or open an issue.
 
 ## Roadmap
 

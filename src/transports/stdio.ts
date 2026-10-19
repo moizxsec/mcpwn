@@ -80,7 +80,19 @@ export class StdioProxy {
     // is held for interactive review (which awaits operator input).
     let queue: Promise<void> = Promise.resolve();
     const enqueue = (raw: string) => {
-      queue = queue.then(() => this.handleLine(raw, dst, direction)).catch(() => {});
+      queue = queue.then(() => this.handleLine(raw, dst, direction)).catch((err) => {
+        // Never block the wire: if handling a line fails unexpectedly, forward
+        // the original bytes untouched rather than silently dropping them (the
+        // host would otherwise hang waiting for a response that never comes).
+        this.opts.logger.error(
+          `pump failure (${direction}); forwarding raw line: ${(err as Error)?.message ?? err}`
+        );
+        try {
+          dst.write(raw + "\n");
+        } catch {
+          /* destination already gone */
+        }
+      });
     };
 
     src.on("data", (chunk: Buffer) => {
@@ -101,44 +113,54 @@ export class StdioProxy {
   private async handleLine(raw: string, dst: NodeJS.WritableStream, direction: Direction) {
     const parsed = parseLine(raw);
 
-    // Maintain correlation map regardless of tampering.
-    if (direction === "client->server") this.correlator.noteRequest(parsed);
-    const correlatedMethod =
-      direction === "server->client" ? this.correlator.resolve(parsed) : undefined;
+    // Maintain correlation in BOTH directions. MCP is bidirectional: the server
+    // issues requests too (sampling/createMessage, roots/list, elicitation/
+    // create) whose replies travel the other way. The correlator keys by
+    // (direction, id) so the two id-spaces never collide.
+    this.correlator.noteRequest(parsed, direction);
+    const correlatedMethod = this.correlator.resolve(parsed, direction);
 
     const flow: FlowMessage = { ...parsed, direction, correlatedMethod, ts: Date.now() };
 
     // Opaque relay for anything we couldn't parse — never block the wire.
     if (parsed.kind === "unknown" || !parsed.json) {
-      this.opts.logger.message(flow, [], false);
+      this.opts.logger.message(flow, [], false, { forwarded: raw });
       dst.write(raw + "\n");
       return;
     }
 
     // 1) Headless rules run first (auto-tamper).
-    const result = applyRules(this.opts.rules, flow);
+    const result = applyRules(this.opts.rules, flow, this.opts.logger);
     if (result.json === null) {
-      this.opts.logger.message(flow, result.applied, true);
-      return; // dropped by a rule
+      // Dropped by a rule: don't leak the correlator entry for a dropped
+      // request (its reply will never arrive to clear it).
+      this.correlator.forget(parsed, direction);
+      this.opts.logger.message(flow, result.applied, true, { forwarded: null });
+      return;
     }
 
     // 2) Interactive review (optional) — operator sees the rule-applied message.
     let outJson = result.json;
     let changed = result.changed;
+    let manualEdit = false;
     if (this.opts.intercept?.shouldHold()) {
       const decision = await this.opts.intercept.review(flow, outJson);
       if (decision.action === "drop") {
-        this.opts.logger.message(flow, [...result.applied, "manual-drop"], true);
+        this.correlator.forget(parsed, direction);
+        this.opts.logger.message(flow, [...result.applied, "manual-drop"], true, {
+          forwarded: null,
+        });
         return;
       }
       if (JSON.stringify(decision.json) !== JSON.stringify(outJson)) {
         outJson = decision.json;
         changed = true;
+        manualEdit = true;
       }
     }
 
-    this.opts.logger.message(flow, result.applied, false);
     const out = changed ? serialize(outJson) : raw;
+    this.opts.logger.message(flow, result.applied, false, { forwarded: out, manualEdit });
     dst.write(out + "\n");
   }
 

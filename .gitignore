@@ -4,3 +4,6 @@ dist/
 *.tgz
 .DS_Store
 mcpwn-session*.jsonl
+
+# local secrets
+.env

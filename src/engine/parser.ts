@@ -4,6 +4,13 @@ import type { RpcMessage, MessageKind } from "../types.js";
  *  "unknown" and is relayed opaquely (NFR-3). */
 function classify(json: any): MessageKind {
   if (json == null || typeof json !== "object") return "unknown";
+  // JSON-RPC 2.0 batches arrive as an array of messages. mcpwn does NOT
+  // classify, correlate or tamper batch elements individually — a batch is
+  // relayed opaquely (as "unknown") so the wire is never blocked or mangled.
+  // Batches are rare in MCP (removed in the 2025-06-18 spec revision); detect
+  // them explicitly so this is a deliberate choice, not a silent fall-through.
+  // See README ("Batched messages").
+  if (Array.isArray(json)) return "unknown";
   const hasId = "id" in json;
   const hasMethod = typeof json.method === "string";
   if (hasMethod && hasId) return "request";

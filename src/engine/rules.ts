@@ -9,6 +9,12 @@ export interface RuleResult {
   changed: boolean;
 }
 
+/** Minimal logging surface used for rule-failure reporting; the real Logger
+ *  satisfies it. Kept narrow so the rules engine stays easy to test. */
+export interface RuleLogger {
+  error(text: string): void;
+}
+
 export function loadRules(path: string): Rule[] {
   const data = JSON.parse(readFileSync(path, "utf8")) as RuleFile;
   if (!data || !Array.isArray(data.rules)) {
@@ -53,14 +59,21 @@ function applyAction(action: RuleAction, json: any): boolean {
       const after = before.replace(re, action.replace);
       if (after === before) return false;
       // Re-parse so we forward valid JSON, not a mangled string.
+      let reparsed: any;
       try {
-        const reparsed = JSON.parse(after);
-        for (const k of Object.keys(json)) delete json[k];
-        Object.assign(json, reparsed);
-        return true;
+        reparsed = JSON.parse(after);
       } catch {
         return false; // refuse to forward invalid JSON
       }
+      // Guard: a JSON-RPC message is always a JSON object. If the replace
+      // turned it into an array or scalar, Object.assign would silently
+      // corrupt the message — refuse the change and keep the original.
+      if (reparsed === null || typeof reparsed !== "object" || Array.isArray(reparsed)) {
+        return false;
+      }
+      for (const k of Object.keys(json)) delete json[k];
+      Object.assign(json, reparsed);
+      return true;
     }
 
     case "injectToolResult": {
@@ -85,8 +98,11 @@ function applyAction(action: RuleAction, json: any): boolean {
       if (!Array.isArray(tools)) return false;
       let changed = false;
       for (const t of tools) {
-        if (action.tool && t?.name !== action.tool) continue;
-        if (typeof t?.description !== "string") t.description = "";
+        // Skip holes / non-object entries so a malformed tools array can't
+        // throw (setting a property on null) and abort the whole message.
+        if (t == null || typeof t !== "object") continue;
+        if (action.tool && t.name !== action.tool) continue;
+        if (typeof t.description !== "string") t.description = "";
         t.description = applyText(t.description, action.text, action.mode);
         changed = true;
       }
@@ -98,8 +114,13 @@ function applyAction(action: RuleAction, json: any): boolean {
 /**
  * Run all rules against a flow message. Headless tamper core: returns the
  * JSON to forward (or null to drop) plus which rules fired.
+ *
+ * A rule that throws (e.g. an invalid regex, malformed payload) must never
+ * take the message down with it: the failure is logged, any partial mutation
+ * is rolled back, and the message is forwarded UNtampered for that rule. Only
+ * an explicit `drop` action stops forwarding.
  */
-export function applyRules(rules: Rule[], msg: FlowMessage): RuleResult {
+export function applyRules(rules: Rule[], msg: FlowMessage, logger?: RuleLogger): RuleResult {
   if (!msg.json) return { json: msg.json, applied: [], changed: false };
 
   // Deep clone so an aborted/partial mutation never corrupts the raw record.
@@ -112,7 +133,23 @@ export function applyRules(rules: Rule[], msg: FlowMessage): RuleResult {
     if (rule.action.kind === "drop") {
       return { json: null, applied: [...applied, rule.name], changed: true };
     }
-    const did = applyAction(rule.action, json);
+
+    // Snapshot before the (mutating) action so a throw rolls back cleanly.
+    const snapshot = JSON.stringify(json);
+    let did = false;
+    try {
+      did = applyAction(rule.action, json);
+    } catch (err) {
+      // Restore the pre-rule state in place (keep the same object identity so
+      // later rules and the caller see an intact message), then carry on.
+      const restored = JSON.parse(snapshot);
+      for (const k of Object.keys(json)) delete json[k];
+      Object.assign(json, restored);
+      logger?.error(
+        `rule "${rule.name}" threw (${(err as Error)?.message ?? err}); forwarding untampered`
+      );
+      did = false;
+    }
     if (did) {
       applied.push(rule.name);
       changed = true;

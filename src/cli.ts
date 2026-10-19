@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { pathToFileURL } from "node:url";
 import { StdioProxy } from "./transports/stdio.js";
 import { loadRules } from "./engine/rules.js";
 import { InterceptController } from "./engine/intercept.js";
@@ -37,7 +38,7 @@ CONFIG (in your MCP client) — wrap the existing command:
   after:   { "command": "mcpwn", "args": ["--", "npx", "-y", "@some/server"] }
 `;
 
-interface ParsedArgs {
+export interface ParsedArgs {
   ruleFiles: string[];
   logFile?: string;
   verbose: boolean;
@@ -46,7 +47,11 @@ interface ParsedArgs {
   commandArgs: string[];
 }
 
-function parseArgs(argv: string[]): ParsedArgs | "help" | "version" {
+/** Thrown for malformed CLI input (missing option value, unknown flag). The
+ *  caller prints the message and usage, then exits non-zero. */
+export class ArgError extends Error {}
+
+export function parseArgs(argv: string[]): ParsedArgs | "help" | "version" {
   const out: ParsedArgs = { ruleFiles: [], verbose: false, intercept: false, commandArgs: [] };
   let i = 0;
   for (; i < argv.length; i++) {
@@ -70,14 +75,28 @@ function parseArgs(argv: string[]): ParsedArgs | "help" | "version" {
         out.intercept = true;
         break;
       case "-r":
-      case "--rule":
-        out.ruleFiles.push(argv[++i]);
+      case "--rule": {
+        const val = argv[++i];
+        if (val === undefined) throw new ArgError(`option ${a} requires a <file> argument`);
+        out.ruleFiles.push(val);
         break;
+      }
       case "-l":
-      case "--log":
-        out.logFile = argv[++i];
+      case "--log": {
+        const val = argv[++i];
+        if (val === undefined) throw new ArgError(`option ${a} requires a <file> argument`);
+        out.logFile = val;
         break;
+      }
       default:
+        // Reject stray flags instead of treating them as the command — an
+        // unknown `--foo` is almost always a typo or a misplaced server flag
+        // (those belong after `--`).
+        if (a.startsWith("-")) {
+          throw new ArgError(
+            `unknown option "${a}" — put the server command (and its flags) after "--"`
+          );
+        }
         // First non-flag before `--` is treated as the command start.
         out.command = a;
         out.commandArgs = argv.slice(i + 1);
@@ -92,7 +111,18 @@ function parseArgs(argv: string[]): ParsedArgs | "help" | "version" {
 
 async function main() {
   const argv = process.argv.slice(2);
-  const parsed = parseArgs(argv);
+
+  let parsed: ParsedArgs | "help" | "version";
+  try {
+    parsed = parseArgs(argv);
+  } catch (err) {
+    if (err instanceof ArgError) {
+      process.stderr.write(`mcpwn: ${err.message}\n\n`);
+      process.stderr.write(HELP);
+      process.exit(2);
+    }
+    throw err;
+  }
 
   if (parsed === "help") {
     process.stderr.write(HELP);
@@ -136,7 +166,11 @@ async function main() {
   process.exit(code);
 }
 
-main().catch((err) => {
-  process.stderr.write(`mcpwn fatal: ${err?.stack ?? err}\n`);
-  process.exit(1);
-});
+// Only run when invoked as the binary, not when imported (e.g. by tests).
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+if (invokedPath === import.meta.url) {
+  main().catch((err) => {
+    process.stderr.write(`mcpwn fatal: ${err?.stack ?? err}\n`);
+    process.exit(1);
+  });
+}

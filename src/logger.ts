@@ -27,6 +27,15 @@ export interface LoggerOptions {
   verbose?: boolean;
 }
 
+export interface MessageLogExtra {
+  /** The exact bytes actually forwarded on the wire (no trailing newline),
+   *  or null when the message was dropped. Defaults to the original raw line
+   *  when omitted (untampered relay). */
+  forwarded?: string | null;
+  /** True when the operator hand-edited the message in interactive mode. */
+  manualEdit?: boolean;
+}
+
 export class Logger {
   constructor(private opts: LoggerOptions = {}) {}
 
@@ -42,12 +51,19 @@ export class Logger {
     this.write("");
   }
 
-  message(msg: FlowMessage, applied: string[], dropped: boolean) {
+  message(msg: FlowMessage, applied: string[], dropped: boolean, extra: MessageLogExtra = {}) {
+    const manualEdit = extra.manualEdit ?? false;
     const method = msg.method ?? msg.correlatedMethod ?? dim("(" + msg.kind + ")");
     const id = msg.id !== undefined ? dim(`#${JSON.stringify(msg.id)}`) : "";
     let tag = "";
-    if (dropped) tag = " " + red("[DROPPED]");
-    else if (applied.length) tag = " " + yellow(`[tampered: ${applied.join(",")}]`);
+    if (dropped) {
+      tag = " " + red("[DROPPED]");
+    } else {
+      const parts: string[] = [];
+      if (applied.length) parts.push(`tampered: ${applied.join(",")}`);
+      if (manualEdit) parts.push("edited");
+      if (parts.length) tag = " " + yellow(`[${parts.join(" ")}]`);
+    }
 
     this.write(`${arrow(msg.direction)} ${bold(String(method))} ${id}${tag}`);
 
@@ -60,6 +76,9 @@ export class Logger {
     }
 
     if (this.opts.logFile) {
+      // Evidence integrity: record BOTH the original line we received and the
+      // exact bytes we put back on the wire (null if dropped), plus whether a
+      // human hand-edited it — not just whether a rule fired.
       const record = {
         ts: msg.ts,
         direction: msg.direction,
@@ -68,7 +87,9 @@ export class Logger {
         id: msg.id ?? null,
         applied,
         dropped,
+        manualEdit,
         raw: msg.raw,
+        forwarded: dropped ? null : extra.forwarded ?? msg.raw,
       };
       try {
         appendFileSync(this.opts.logFile, JSON.stringify(record) + "\n");

@@ -41,6 +41,7 @@
     "dev": "tsc --watch",
     "test": "npm run build && node --test test/",
     "demo:server": "node examples/vulnerable-server.mjs",
+    "demo:http": "node examples/vulnerable-server-http.mjs",
     "demo": "node examples/run-demo.mjs",
     "gif": "node tools/gen-gif.mjs",
     "prepublishOnly": "npm run build"

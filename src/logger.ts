@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import type { FlowMessage } from "./types.js";
+import { redact, type RedactPattern } from "./redact.js";
 
 /**
  * All human-facing output goes to STDERR. stdout/stdin are the MCP channel
@@ -25,6 +26,10 @@ export interface LoggerOptions {
   logFile?: string;
   /** Print full pretty-printed bodies, not just a one-line summary. */
   verbose?: boolean;
+  /** Secret-redaction patterns (§3.9). When set, matches are masked in BOTH the
+   *  stderr display and the JSONL raw/forwarded fields. Redaction NEVER touches
+   *  the bytes forwarded on the wire — it is a logging concern only. */
+  redactPatterns?: RedactPattern[];
 }
 
 export interface MessageLogExtra {
@@ -46,6 +51,12 @@ export class Logger {
 
   private write(line: string) {
     process.stderr.write(line + "\n");
+  }
+
+  /** Apply secret redaction when configured; a no-op otherwise. */
+  private mask(text: string): string {
+    const pats = this.opts.redactPatterns;
+    return pats && pats.length ? redact(text, pats) : text;
   }
 
   banner(childCmd: string, ruleCount: number) {
@@ -77,7 +88,7 @@ export class Logger {
       this.write(`${arrow(msg.direction)} ${bold(String(method))} ${id}${tag}`);
 
       if (this.opts.verbose && msg.json) {
-        const pretty = JSON.stringify(msg.json, null, 2)
+        const pretty = this.mask(JSON.stringify(msg.json, null, 2))
           .split("\n")
           .map((l) => dim("  │ ") + l)
           .join("\n");
@@ -89,6 +100,7 @@ export class Logger {
       // Evidence integrity: record BOTH the original line we received and the
       // exact bytes we put back on the wire (null if dropped), plus whether a
       // human hand-edited it — not just whether a rule fired.
+      const forwarded = dropped ? null : extra.forwarded ?? msg.raw;
       const record = {
         ts: msg.ts,
         direction: msg.direction,
@@ -98,8 +110,10 @@ export class Logger {
         applied,
         dropped,
         manualEdit,
-        raw: msg.raw,
-        forwarded: dropped ? null : extra.forwarded ?? msg.raw,
+        // Redaction (§3.9) masks secrets in the stored evidence too, so a
+        // session log never persists a live credential.
+        raw: this.mask(msg.raw),
+        forwarded: forwarded === null ? null : this.mask(forwarded),
       };
       try {
         appendFileSync(this.opts.logFile, JSON.stringify(record) + "\n");

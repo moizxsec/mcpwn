@@ -5,6 +5,8 @@ import { inScope, type Scope } from "./scope.js";
 import type { InterceptController } from "../engine/intercept.js";
 import type { Direction, FlowMessage, Rule } from "../types.js";
 import type { Logger, MessageLogExtra } from "../logger.js";
+import type { Detector } from "../detect/detector.js";
+import type { FindingsSink } from "../findings.js";
 
 /**
  * Transport-agnostic processing options. A transport (stdio, and later HTTP)
@@ -27,6 +29,11 @@ export interface PipelineOptions {
    *  0 (the default, used by stdio) means unlimited. A bounded hold is only
    *  meaningful for request/response transports (HTTP, M3). */
   holdTimeoutMs?: number;
+  /** Passive detectors (§3.4, §3.9). Run read-only on every parseable message;
+   *  they only record findings and NEVER affect what is forwarded. */
+  detectors?: Detector[];
+  /** Where detectors record findings. */
+  findings?: FindingsSink;
 }
 
 /** What a single processed message resolves to. */
@@ -83,6 +90,24 @@ export class MessagePipeline {
     });
   }
 
+  /** Run every detector read-only against the flow, isolating failures. A
+   *  detector that throws is logged and skipped — it never takes the message
+   *  (or any other detector) down with it (Invariant #2). */
+  private detect(flow: FlowMessage): void {
+    const detectors = this.opts.detectors;
+    const sink = this.opts.findings;
+    if (!detectors || detectors.length === 0 || !sink) return;
+    for (const d of detectors) {
+      try {
+        d.inspect(flow, sink);
+      } catch (err) {
+        this.opts.logger.error(
+          `detector threw (${(err as Error)?.message ?? err}); ignoring`
+        );
+      }
+    }
+  }
+
   async process(raw: string, direction: Direction): Promise<ProcessResult> {
     const parsed = parseLine(raw);
 
@@ -103,6 +128,13 @@ export class MessagePipeline {
       this.log(flow, [], false, { forwarded: raw }, this.isCandidate(flow));
       return { forward: raw, flow, applied: [], manualEdit: false };
     }
+
+    // Passive detection (§3.4, §3.9). Run on EVERY parseable message, regardless
+    // of scope or any later tamper/drop decision, so out-of-scope and dropped
+    // server output is still inspected. Detectors read the ORIGINAL message
+    // (never the tampered clone), are read-only, and are each wrapped so a
+    // throwing detector can never block the wire (Invariant #2).
+    this.detect(flow);
 
     // Scope gate: out-of-scope traffic is ALWAYS forwarded untouched — no rules,
     // no interactive hold — and suppressed from the stderr log (§3.6).

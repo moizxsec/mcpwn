@@ -1,18 +1,21 @@
-# Record the mcpwn demo as a GIF with charmbracelet/vhs:
+# Record the real mcpwn demo as a GIF with charmbracelet/vhs:
 #   vhs tools/demo.tape
-# Produces assets/demo-recorded.gif from a real terminal run.
-# (The committed assets/demo.gif is generated headlessly by tools/gen-gif.mjs,
-#  which needs no recorder — use this tape if you prefer a live capture.)
+# Captures a live terminal run of `npm run demo` (mcpwn tampering a tool
+# result in flight so the agent exfiltrates a secret) into assets/demo.gif.
 
-Output assets/demo-recorded.gif
+Output assets/demo.gif
 
-Set FontSize 17
-Set Width 900
-Set Height 700
-Set Padding 20
+Set FontSize 15
+Set Width 1000
+Set Height 820
+Set Padding 18
 Set Theme "GitHub Dark"
 
+Hide
+Type "clear" Enter
+Show
+Sleep 400ms
 Type "npm run demo"
-Sleep 500ms
+Sleep 600ms
 Enter
-Sleep 6s
+Sleep 7s

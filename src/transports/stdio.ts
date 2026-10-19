@@ -1,18 +1,20 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
-import { LineFramer, parseLine, serialize } from "../engine/parser.js";
-import { Correlator } from "../engine/correlator.js";
-import { applyRules } from "../engine/rules.js";
-import { InterceptController } from "../engine/intercept.js";
-import type { Direction, FlowMessage, Rule } from "../types.js";
-import type { Logger } from "../logger.js";
+import { LineFramer } from "../engine/parser.js";
+import type { InterceptController } from "../engine/intercept.js";
+import type { MessagePipeline } from "../core/pipeline.js";
+import type { Transport, TransportDeps } from "./transport.js";
+import type { Direction } from "../types.js";
 
-export interface StdioProxyOptions {
+export interface StdioTransportOptions extends TransportDeps {
   command: string;
   args: string[];
-  rules: Rule[];
-  logger: Logger;
-  /** When set, hold messages for interactive review (the Repeater loop). */
+  /** Number of active rules, for the startup banner (the pipeline owns the
+   *  rules themselves). Defaults to 0. */
+  ruleCount?: number;
+  /** When set, hold messages for interactive review (the Repeater loop). The
+   *  same controller is handed to the pipeline, which drives the review; the
+   *  transport only owns its lifecycle (availability + start/stop). */
   intercept?: InterceptController;
 }
 
@@ -22,20 +24,26 @@ export interface StdioProxyOptions {
  *   host ──stdin──►  mcpwn  ──child.stdin──►  real server
  *   host ◄─stdout──  mcpwn  ◄─child.stdout──  real server
  *
- * Every line is parsed, correlated, run through rules, logged to stderr,
- * then forwarded. Unparseable lines are relayed opaquely (NFR-3). The
- * child's own stderr is passed straight through so server logs survive.
+ * Framing lives here (one JSON message per line); the pipeline decides what to
+ * forward. Each framed line is handed to `pipeline.process`, and whatever it
+ * returns is written back with the stdio newline (unless it was dropped).
+ * Unparseable lines are relayed opaquely by the pipeline (NFR-3). The child's
+ * own stderr is passed straight through so server logs survive.
  */
-export class StdioProxy {
+export class StdioTransport implements Transport {
   private child!: ChildProcessByStdio<Writable, Readable, null>;
-  private correlator = new Correlator();
   private closing = false;
+  private pipeline: MessagePipeline;
+  private intercept?: InterceptController;
 
-  constructor(private opts: StdioProxyOptions) {}
+  constructor(private opts: StdioTransportOptions) {
+    this.pipeline = opts.pipeline;
+    this.intercept = opts.intercept;
+  }
 
   start(): Promise<number> {
     const { command, args, logger } = this.opts;
-    logger.banner(`${command} ${args.join(" ")}`.trim(), this.opts.rules.length);
+    logger.banner(`${command} ${args.join(" ")}`.trim(), this.opts.ruleCount ?? 0);
 
     this.child = spawn(command, args, {
       stdio: ["pipe", "pipe", "inherit"],
@@ -47,12 +55,14 @@ export class StdioProxy {
     });
 
     // Interactive intercept needs a controlling terminal; degrade gracefully.
-    if (this.opts.intercept) {
-      if (this.opts.intercept.available()) {
-        this.opts.intercept.start();
+    // When unavailable we simply never start the controller: shouldHold() then
+    // reports false, so the pipeline auto-forwards without holding.
+    if (this.intercept) {
+      if (this.intercept.available()) {
+        this.intercept.start();
       } else {
         logger.info("interactive intercept requested but no /dev/tty — auto-forwarding");
-        this.opts.intercept = undefined;
+        this.intercept = undefined;
       }
     }
 
@@ -68,6 +78,10 @@ export class StdioProxy {
       });
       this.installSignalHandlers();
     });
+  }
+
+  stop(): void {
+    this.shutdown(0);
   }
 
   private pump(
@@ -111,57 +125,11 @@ export class StdioProxy {
   }
 
   private async handleLine(raw: string, dst: NodeJS.WritableStream, direction: Direction) {
-    const parsed = parseLine(raw);
-
-    // Maintain correlation in BOTH directions. MCP is bidirectional: the server
-    // issues requests too (sampling/createMessage, roots/list, elicitation/
-    // create) whose replies travel the other way. The correlator keys by
-    // (direction, id) so the two id-spaces never collide.
-    this.correlator.noteRequest(parsed, direction);
-    const correlatedMethod = this.correlator.resolve(parsed, direction);
-
-    const flow: FlowMessage = { ...parsed, direction, correlatedMethod, ts: Date.now() };
-
-    // Opaque relay for anything we couldn't parse — never block the wire.
-    if (parsed.kind === "unknown" || !parsed.json) {
-      this.opts.logger.message(flow, [], false, { forwarded: raw });
-      dst.write(raw + "\n");
-      return;
-    }
-
-    // 1) Headless rules run first (auto-tamper).
-    const result = applyRules(this.opts.rules, flow, this.opts.logger);
-    if (result.json === null) {
-      // Dropped by a rule: don't leak the correlator entry for a dropped
-      // request (its reply will never arrive to clear it).
-      this.correlator.forget(parsed, direction);
-      this.opts.logger.message(flow, result.applied, true, { forwarded: null });
-      return;
-    }
-
-    // 2) Interactive review (optional) — operator sees the rule-applied message.
-    let outJson = result.json;
-    let changed = result.changed;
-    let manualEdit = false;
-    if (this.opts.intercept?.shouldHold()) {
-      const decision = await this.opts.intercept.review(flow, outJson);
-      if (decision.action === "drop") {
-        this.correlator.forget(parsed, direction);
-        this.opts.logger.message(flow, [...result.applied, "manual-drop"], true, {
-          forwarded: null,
-        });
-        return;
-      }
-      if (JSON.stringify(decision.json) !== JSON.stringify(outJson)) {
-        outJson = decision.json;
-        changed = true;
-        manualEdit = true;
-      }
-    }
-
-    const out = changed ? serialize(outJson) : raw;
-    this.opts.logger.message(flow, result.applied, false, { forwarded: out, manualEdit });
-    dst.write(out + "\n");
+    // The pipeline owns parse→correlate→rules→intercept→log and returns the
+    // exact bytes to forward (no framing), or null to drop. We add the stdio
+    // newline and nothing else, so idle traffic is byte-identical.
+    const { forward } = await this.pipeline.process(raw, direction);
+    if (forward !== null) dst.write(forward + "\n");
   }
 
   private installSignalHandlers() {
@@ -176,7 +144,7 @@ export class StdioProxy {
   private shutdown(code: number) {
     if (this.closing) return;
     this.closing = true;
-    this.opts.intercept?.stop();
+    this.intercept?.stop();
     try {
       this.child?.kill("SIGTERM");
     } catch {

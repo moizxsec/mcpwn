@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { FlowMessage, Rule, RuleAction, RuleFile } from "../types.js";
+import type { FlowMessage, Rule, RuleAction } from "../types.js";
+import { validateRuleFile } from "./validate.js";
 
 export interface RuleResult {
   /** The (possibly rewritten) JSON to forward, or null to DROP the message. */
@@ -16,11 +17,13 @@ export interface RuleLogger {
 }
 
 export function loadRules(path: string): Rule[] {
-  const data = JSON.parse(readFileSync(path, "utf8")) as RuleFile;
-  if (!data || !Array.isArray(data.rules)) {
-    throw new Error(`Rule file ${path} has no "rules" array`);
+  const data = JSON.parse(readFileSync(path, "utf8"));
+  const result = validateRuleFile(data);
+  if (!result.ok) {
+    // Surface every problem at once; the CLI logs this and exits 2.
+    throw new Error(`invalid rule file:\n  - ${result.errors.join("\n  - ")}`);
   }
-  return data.rules;
+  return result.rules;
 }
 
 /** Does this rule apply to the given flow message? */
@@ -107,6 +110,15 @@ function applyAction(action: RuleAction, json: any): boolean {
         changed = true;
       }
       return changed;
+    }
+
+    default: {
+      // Unreachable for well-formed rules (the loader validates kinds), but an
+      // unknown kind must FAIL LOUD here rather than silently no-op: the per-rule
+      // try/catch in applyRules turns this throw into a logged error and forwards
+      // the message untampered, so the wire is never blocked (NFR-8).
+      const kind = (action as { kind?: unknown }).kind;
+      throw new Error(`unknown action kind: ${String(kind)}`);
     }
   }
 }

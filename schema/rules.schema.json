@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moizxsec/mcpwn/schema/rules.schema.json",
+  "title": "mcpwn tamper-rule file",
+  "description": "Headless tamper rules applied to MCP JSON-RPC traffic. Mirror of the hand-rolled validator in src/engine/validate.ts (mcpwn ships zero runtime deps and does not evaluate this schema at runtime).",
+  "type": "object",
+  "required": ["rules"],
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "action"],
+      "properties": {
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "direction": {
+          "type": "string",
+          "enum": ["client->server", "server->client"]
+        },
+        "method": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["request", "response", "error", "notification", "unknown"]
+        },
+        "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["append", "prepend", "replace"]
+    },
+    "action": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "injectToolResult" },
+            "text": { "type": "string" },
+            "mode": { "$ref": "#/$defs/mode" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "poisonDescription" },
+            "tool": { "type": "string" },
+            "text": { "type": "string" },
+            "mode": { "$ref": "#/$defs/mode" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "find", "replace"],
+          "properties": {
+            "kind": { "const": "matchReplace" },
+            "find": { "type": "string" },
+            "replace": { "type": "string" },
+            "flags": { "type": "string" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "drop" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -29,6 +29,10 @@ export class InterceptController {
   private rfd = -1;
   private chain: Promise<void> = Promise.resolve();
   private holding = true;
+  /** Only true between start() and stop(); the controller is now shared with
+   *  the pipeline, so a controller that was never started (no /dev/tty, so the
+   *  transport skipped start()) must report shouldHold()=false and stay inert. */
+  private started = false;
 
   constructor(private enabledInitially: boolean) {}
 
@@ -44,6 +48,7 @@ export class InterceptController {
   }
 
   start() {
+    this.started = true;
     this.holding = this.enabledInitially;
     this.rfd = openSync("/dev/tty", "r");
     this.wfd = openSync("/dev/tty", "w");
@@ -60,6 +65,7 @@ export class InterceptController {
   }
 
   stop() {
+    this.started = false;
     try {
       if (this.rs?.isTTY) this.rs.setRawMode(false);
       this.rs?.destroy();
@@ -78,9 +84,11 @@ export class InterceptController {
     }
   }
 
-  /** Whether a message should currently be held for review. */
+  /** Whether a message should currently be held for review. False until the
+   *  controller is started (and again after it stops), so an unavailable /
+   *  torn-down controller never traps a message in the pipeline. */
   shouldHold(): boolean {
-    return this.holding;
+    return this.started && this.holding;
   }
 
   /**

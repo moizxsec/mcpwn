@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
-import { StdioProxy } from "./transports/stdio.js";
+import { StdioTransport } from "./transports/stdio.js";
+import { MessagePipeline } from "./core/pipeline.js";
 import { loadRules } from "./engine/rules.js";
 import { InterceptController } from "./engine/intercept.js";
 import { Logger } from "./logger.js";
@@ -154,15 +155,21 @@ async function main() {
     }
   }
 
-  const proxy = new StdioProxy({
+  const intercept = parsed.intercept ? new InterceptController(true) : undefined;
+
+  // The pipeline owns parse→correlate→rules→intercept→log→forward; the
+  // transport owns framing + I/O. They share one intercept controller.
+  const pipeline = new MessagePipeline({ rules, logger, intercept });
+  const transport = new StdioTransport({
     command: parsed.command,
     args: parsed.commandArgs,
-    rules,
+    pipeline,
     logger,
-    intercept: parsed.intercept ? new InterceptController(true) : undefined,
+    ruleCount: rules.length,
+    intercept,
   });
 
-  const code = await proxy.start();
+  const code = await transport.start();
   process.exit(code);
 }
 

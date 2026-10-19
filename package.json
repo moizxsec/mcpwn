@@ -32,12 +32,13 @@
   "files": [
     "dist",
     "examples",
+    "schema",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node --test test/parser.test.js test/correlator.test.js test/rules.test.js test/cli.test.js",
+    "test": "npm run build && node --test test/",
     "demo:server": "node examples/vulnerable-server.mjs",
     "demo": "node examples/run-demo.mjs",
     "gif": "node tools/gen-gif.mjs",

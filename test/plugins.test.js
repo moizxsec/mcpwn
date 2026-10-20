@@ -13,12 +13,12 @@ import { ArrayFindingsSink } from "../dist/findings.js";
 import { MessagePipeline } from "../dist/core/pipeline.js";
 
 // Plugin loading (§3.11). Loads fixture detector + rule-action plugins from
-// test/fixtures and proves: they fire / tamper; a throwing plugin is isolated
+// test-fixtures/ and proves: they fire / tamper; a throwing plugin is isolated
 // (never crashes the pipeline or the rules engine); a bogus/invalid plugin
 // errors cleanly; and a registered custom kind passes validation.
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const fx = (f) => join(here, "fixtures", f);
+const fx = (f) => join(here, "..", "test-fixtures", f);
 
 const S2C = "server->client";
 function s2cFlow(json, method) {

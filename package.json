@@ -49,6 +49,7 @@
     "demo:server": "node examples/vulnerable-server.mjs",
     "demo:http": "node examples/vulnerable-server-http.mjs",
     "demo": "node examples/run-demo.mjs",
+    "dvmcp": "node examples/dvmcp/index.mjs",
     "gif": "node tools/gen-gif.mjs",
     "prepublishOnly": "npm run build"
   },

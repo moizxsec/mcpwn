@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, copyFileSync, existsSync, rmSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -44,24 +44,31 @@ function homeDir(env: NodeJS.ProcessEnv): string | undefined {
   return env.HOME || env.USERPROFILE || undefined;
 }
 
+/** Join using the TARGET platform's separators, not the host's — so resolving a
+ *  darwin/linux path on a Windows host (and vice versa, e.g. in tests) yields the
+ *  separators that platform actually uses. */
+function pjoin(platform: NodeJS.Platform, ...parts: string[]): string {
+  return (platform === "win32" ? win32 : posix).join(...parts);
+}
+
 /** Per-OS user-config base dir: %APPDATA% (win), ~/Library/Application Support
  *  (mac), $XDG_CONFIG_HOME or ~/.config (linux/other). */
 function configBase(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string | undefined {
   if (platform === "win32") return env.APPDATA || undefined;
   if (platform === "darwin") {
     const h = homeDir(env);
-    return h ? join(h, "Library", "Application Support") : undefined;
+    return h ? pjoin(platform, h, "Library", "Application Support") : undefined;
   }
   if (env.XDG_CONFIG_HOME) return env.XDG_CONFIG_HOME;
   const h = homeDir(env);
-  return h ? join(h, ".config") : undefined;
+  return h ? pjoin(platform, h, ".config") : undefined;
 }
 
 /** VS Code's per-user dir (`.../Code/User`), host for both VS Code's own
  *  `mcp.json` and the Cline extension's settings. */
 function vscodeUserDir(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string | undefined {
   const base = configBase(env, platform);
-  return base ? join(base, "Code", "User") : undefined;
+  return base ? pjoin(platform, base, "Code", "User") : undefined;
 }
 
 /** The supported clients and where each keeps its MCP config. */
@@ -72,16 +79,16 @@ export const CLIENTS: Record<ClientId, ClientSpec> = {
     serversKey: "mcpServers",
     resolve(env, platform) {
       const base = configBase(env, platform);
-      return base ? join(base, "Claude", "claude_desktop_config.json") : undefined;
+      return base ? pjoin(platform, base, "Claude", "claude_desktop_config.json") : undefined;
     },
   },
   cursor: {
     id: "cursor",
     label: "Cursor",
     serversKey: "mcpServers",
-    resolve(env) {
+    resolve(env, platform) {
       const h = homeDir(env);
-      return h ? join(h, ".cursor", "mcp.json") : undefined;
+      return h ? pjoin(platform, h, ".cursor", "mcp.json") : undefined;
     },
   },
   cline: {
@@ -91,7 +98,8 @@ export const CLIENTS: Record<ClientId, ClientSpec> = {
     resolve(env, platform) {
       const dir = vscodeUserDir(env, platform);
       return dir
-        ? join(
+        ? pjoin(
+            platform,
             dir,
             "globalStorage",
             "saoudrizwan.claude-dev",
@@ -107,16 +115,16 @@ export const CLIENTS: Record<ClientId, ClientSpec> = {
     serversKey: "servers",
     resolve(env, platform) {
       const dir = vscodeUserDir(env, platform);
-      return dir ? join(dir, "mcp.json") : undefined;
+      return dir ? pjoin(platform, dir, "mcp.json") : undefined;
     },
   },
   windsurf: {
     id: "windsurf",
     label: "Windsurf",
     serversKey: "mcpServers",
-    resolve(env) {
+    resolve(env, platform) {
       const h = homeDir(env);
-      return h ? join(h, ".codeium", "windsurf", "mcp_config.json") : undefined;
+      return h ? pjoin(platform, h, ".codeium", "windsurf", "mcp_config.json") : undefined;
     },
   },
 };

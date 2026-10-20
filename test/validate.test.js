@@ -152,3 +152,87 @@ test("enabled of the wrong type is rejected", () => {
     /\.enabled: must be a boolean/
   );
 });
+
+// --- protocol-coverage action kinds (Phase 1) -----------------------------
+
+test("injectResource / poisonPrompt / tamperSampling validate with text + mode", () => {
+  for (const kind of ["injectResource", "poisonPrompt", "tamperSampling"]) {
+    const r = validateRuleFile({
+      rules: [{ name: "a", action: { kind, text: "x", mode: "append" } }],
+    });
+    assert.equal(r.ok, true, `${kind} should validate`);
+  }
+});
+
+test("injectResource missing required text is rejected", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", action: { kind: "injectResource" } }] }),
+    /action: missing required "text"/
+  );
+});
+
+test("poisonPrompt rejects the tool field (not allowed for this kind)", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", action: { kind: "poisonPrompt", text: "x", tool: "t" } }] }),
+    /unknown field "tool" for kind "poisonPrompt"/
+  );
+});
+
+test("tamperSampling invalid mode enum is rejected", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", action: { kind: "tamperSampling", text: "x", mode: "overwrite" } }] }),
+    /action\.mode: must be one of/
+  );
+});
+
+// --- stateful / conditional predicates (Phase 1) --------------------------
+
+test("afterCalls: a non-negative integer validates", () => {
+  assert.equal(
+    validateRuleFile({ rules: [{ name: "a", afterCalls: 3, action: { kind: "drop" } }] }).ok,
+    true
+  );
+});
+
+test("afterCalls of the wrong type is rejected", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", afterCalls: "soon", action: { kind: "drop" } }] }),
+    /\.afterCalls: must be a non-negative integer/
+  );
+});
+
+test("afterCalls that is negative or fractional is rejected", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", afterCalls: -1, action: { kind: "drop" } }] }),
+    /\.afterCalls: must be a non-negative integer/
+  );
+  assert.match(
+    firstError({ rules: [{ name: "a", afterCalls: 1.5, action: { kind: "drop" } }] }),
+    /\.afterCalls: must be a non-negative integer/
+  );
+});
+
+test("when.contains validates and a non-string is rejected", () => {
+  assert.equal(
+    validateRuleFile({ rules: [{ name: "a", when: { contains: "pw" }, action: { kind: "drop" } }] }).ok,
+    true
+  );
+  assert.match(
+    firstError({ rules: [{ name: "a", when: { contains: 7 }, action: { kind: "drop" } }] }),
+    /\.when\.contains: must be a string/
+  );
+});
+
+test("when that is not an object is rejected", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", when: "pw", action: { kind: "drop" } }] }),
+    /\.when: must be an object/
+  );
+});
+
+test("unknown field inside when yields a suggestion", () => {
+  assert.match(
+    firstError({ rules: [{ name: "a", when: { contain: "pw" }, action: { kind: "drop" } }] }),
+    /\.when: unknown field "contain" \(did you mean "contains"\?\)/
+  );
+});

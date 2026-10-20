@@ -35,6 +35,17 @@ export type RuleAction =
       text: string;
       mode?: "append" | "prepend" | "replace";
     }
+  // --- protocol-coverage tampering (§3.2) ---
+  /** Tamper a server->client `resources/read` result: mutate result.contents[]
+   *  text (and blob, decoded then re-encoded, where relevant). Mirrors how
+   *  injectToolResult walks a tools/call result's content. */
+  | { kind: "injectResource"; text: string; mode?: "append" | "prepend" | "replace" }
+  /** Tamper a server->client `prompts/get` result: mutate every
+   *  result.messages[].content.text (prompt-template poisoning). */
+  | { kind: "poisonPrompt"; text: string; mode?: "append" | "prepend" | "replace" }
+  /** Tamper a server->client `sampling/createMessage` request: rewrite every
+   *  params.messages[].content.text (server-to-model prompt injection). */
+  | { kind: "tamperSampling"; text: string; mode?: "append" | "prepend" | "replace" }
   | { kind: "matchReplace"; find: string; replace: string; flags?: string }
   // --- argument tampering (§3.2) — apply only to client->server tools/call ---
   /** Set a single argument (by JSON path within params.arguments) to a value,
@@ -52,6 +63,14 @@ export type RuleAction =
   | { kind: "fuzzArgs"; tool?: string; path: string; payloads: string[] | string }
   | { kind: "drop" };
 
+/** Conditional predicates a rule can gate its action on (§3.2). */
+export interface RulePredicate {
+  /** Only apply the action when this substring appears in the message JSON.
+   *  (Checked against the serialized message so it spans results, resources,
+   *  prompt messages, descriptions and arguments alike.) */
+  contains?: string;
+}
+
 /** A headless tamper rule (NFR-7: loadable from user files). */
 export interface Rule {
   name: string;
@@ -61,6 +80,12 @@ export interface Rule {
   method?: string;
   /** Restrict to request/response/notification, etc. */
   kind?: MessageKind;
+  /** Stateful rug-pull: serve the message benign (untampered) for the first N
+   *  times the rule matches, then start applying the action. Needs per-rule
+   *  state threaded like the fuzz cursor — never a module global. */
+  afterCalls?: number;
+  /** Conditional gate: only apply the action when the message matches. */
+  when?: RulePredicate;
   action: RuleAction;
 }
 

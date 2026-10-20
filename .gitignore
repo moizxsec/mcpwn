@@ -9,3 +9,6 @@ mcpwn-session*.jsonl
 
 # local secrets
 .env
+
+# npm auth (local only)
+.npmrc

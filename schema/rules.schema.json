@@ -28,7 +28,16 @@
           "type": "string",
           "enum": ["request", "response", "error", "notification", "unknown"]
         },
+        "afterCalls": { "type": "integer", "minimum": 0 },
+        "when": { "$ref": "#/$defs/when" },
         "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "when": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contains": { "type": "string" }
       }
     },
     "mode": {
@@ -58,6 +67,33 @@
           "properties": {
             "kind": { "const": "poisonDescription" },
             "tool": { "type": "string" },
+            "text": { "type": "string" },
+            "mode": { "$ref": "#/$defs/mode" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "injectResource" },
+            "text": { "type": "string" },
+            "mode": { "$ref": "#/$defs/mode" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "poisonPrompt" },
+            "text": { "type": "string" },
+            "mode": { "$ref": "#/$defs/mode" }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "const": "tamperSampling" },
             "text": { "type": "string" },
             "mode": { "$ref": "#/$defs/mode" }
           }

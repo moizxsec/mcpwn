@@ -1,6 +1,6 @@
 import { parseLine, serialize } from "../engine/parser.js";
 import { Correlator } from "../engine/correlator.js";
-import { applyRules, FuzzState } from "../engine/rules.js";
+import { applyRules, FuzzState, RuleState } from "../engine/rules.js";
 import { inScope, type Scope } from "./scope.js";
 import type { InterceptController } from "../engine/intercept.js";
 import type { Direction, FlowMessage, Rule } from "../types.js";
@@ -63,6 +63,9 @@ export class MessagePipeline {
   /** Per-rule fuzz cursors — owned here so each pipeline has its own state and
    *  no module globals are involved (§3.2). */
   private fuzz = new FuzzState();
+  /** Per-rule match counters for stateful predicates (afterCalls) — owned here
+   *  for the same reason: pipeline-scoped state, never a module global (§3.2). */
+  private ruleState = new RuleState();
 
   constructor(private opts: PipelineOptions) {}
 
@@ -142,7 +145,7 @@ export class MessagePipeline {
     }
 
     // 1) Headless rules run first (auto-tamper).
-    const result = applyRules(this.opts.rules, flow, this.opts.logger, this.fuzz);
+    const result = applyRules(this.opts.rules, flow, this.opts.logger, this.fuzz, this.ruleState);
     if (result.json === null) {
       // Dropped by a rule: don't leak the correlator entry for a dropped
       // request (its reply will never arrive to clear it).

@@ -15,6 +15,9 @@ const MESSAGE_KINDS: MessageKind[] = ["request", "response", "error", "notificat
 const ACTION_KINDS = [
   "injectToolResult",
   "poisonDescription",
+  "injectResource",
+  "poisonPrompt",
+  "tamperSampling",
   "matchReplace",
   "setArg",
   "rewriteArgs",
@@ -25,10 +28,23 @@ const MODES = ["append", "prepend", "replace"];
 const REWRITE_MODES = ["replace", "merge"];
 
 /** Allowed keys per rule and per action kind — used for typo detection. */
-const RULE_FIELDS = ["name", "enabled", "direction", "method", "kind", "action"];
+const RULE_FIELDS = [
+  "name",
+  "enabled",
+  "direction",
+  "method",
+  "kind",
+  "afterCalls",
+  "when",
+  "action",
+];
+const WHEN_FIELDS = ["contains"];
 const ACTION_FIELDS: Record<string, string[]> = {
   injectToolResult: ["kind", "text", "mode"],
   poisonDescription: ["kind", "tool", "text", "mode"],
+  injectResource: ["kind", "text", "mode"],
+  poisonPrompt: ["kind", "text", "mode"],
+  tamperSampling: ["kind", "text", "mode"],
   matchReplace: ["kind", "find", "replace", "flags"],
   setArg: ["kind", "tool", "path", "value"],
   rewriteArgs: ["kind", "tool", "args", "mode"],
@@ -149,6 +165,19 @@ function validateRule(rule: unknown, path: string, errors: string[]): void {
     );
   }
 
+  // afterCalls (optional, non-negative integer)
+  if ("afterCalls" in rule) {
+    const n = rule.afterCalls;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+      errors.push(`${path}.afterCalls: must be a non-negative integer (got ${render(n)})`);
+    }
+  }
+
+  // when (optional predicate object)
+  if ("when" in rule) {
+    validateWhen(rule.when, `${path}.when`, errors);
+  }
+
   // Unknown rule-level keys (typo detection).
   for (const key of Object.keys(rule)) {
     if (!RULE_FIELDS.includes(key)) {
@@ -162,6 +191,21 @@ function validateRule(rule: unknown, path: string, errors: string[]): void {
     return;
   }
   validateAction(rule.action, `${path}.action`, errors);
+}
+
+function validateWhen(when: unknown, path: string, errors: string[]): void {
+  if (!isPlainObject(when)) {
+    errors.push(`${path}: must be an object (got ${typeName(when)})`);
+    return;
+  }
+  if ("contains" in when && typeof when.contains !== "string") {
+    errors.push(`${path}.contains: must be a string (got ${typeName(when.contains)})`);
+  }
+  for (const key of Object.keys(when)) {
+    if (!WHEN_FIELDS.includes(key)) {
+      errors.push(`${path}: unknown field "${key}"${suggest(key, WHEN_FIELDS)}`);
+    }
+  }
 }
 
 function validateAction(action: unknown, path: string, errors: string[]): void {
@@ -188,6 +232,12 @@ function validateAction(action: unknown, path: string, errors: string[]): void {
     case "poisonDescription":
       requireString(action, "text", path, errors);
       optionalString(action, "tool", path, errors);
+      optionalMode(action, path, errors);
+      break;
+    case "injectResource":
+    case "poisonPrompt":
+    case "tamperSampling":
+      requireString(action, "text", path, errors);
       optionalMode(action, path, errors);
       break;
     case "matchReplace":

@@ -1,8 +1,8 @@
 # Example: scan an MCP server on every PR and publish results to the Security tab.
 #
 # Copy this into your OWN repository as .github/workflows/mcpwn-scan.yml and edit
-# `server-command` (or `http-url`). It is named *.example.yml here so it does not
-# run inside the mcpwn repo itself.
+# `server-command` (or `http-url`). It lives under examples/ (not
+# .github/workflows/) so GitHub does not execute it inside the mcpwn repo itself.
 name: MCP security scan
 
 on:

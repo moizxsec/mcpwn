@@ -283,7 +283,7 @@ mcpwn, scans a server you name, fails the job on findings at/above a severity,
 and uploads `findings.sarif` to the **Security tab** (code scanning):
 
 ```yaml
-# .github/workflows/mcpwn-scan.yml  (see .github/workflows/mcpwn-scan.example.yml)
+# .github/workflows/mcpwn-scan.yml  (full example: examples/github-action/mcpwn-scan.yml)
 permissions:
   contents: read
   security-events: write          # required to upload SARIF

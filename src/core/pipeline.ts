@@ -7,6 +7,7 @@ import type { Direction, FlowMessage, Rule } from "../types.js";
 import type { Logger, MessageLogExtra } from "../logger.js";
 import type { Detector } from "../detect/detector.js";
 import type { FindingsSink } from "../findings.js";
+import type { RuleActionRegistry } from "../plugins/index.js";
 
 /**
  * Transport-agnostic processing options. A transport (stdio, and later HTTP)
@@ -34,6 +35,9 @@ export interface PipelineOptions {
   detectors?: Detector[];
   /** Where detectors record findings. */
   findings?: FindingsSink;
+  /** Custom tamper-action kinds registered via `--rule-plugin` (§3.11). Threaded
+   *  into the rules engine so a rule may reference a plugin's `kind`. */
+  ruleActionPlugins?: RuleActionRegistry;
 }
 
 /** What a single processed message resolves to. */
@@ -145,7 +149,14 @@ export class MessagePipeline {
     }
 
     // 1) Headless rules run first (auto-tamper).
-    const result = applyRules(this.opts.rules, flow, this.opts.logger, this.fuzz, this.ruleState);
+    const result = applyRules(
+      this.opts.rules,
+      flow,
+      this.opts.logger,
+      this.fuzz,
+      this.ruleState,
+      this.opts.ruleActionPlugins
+    );
     if (result.json === null) {
       // Dropped by a rule: don't leak the correlator entry for a dropped
       // request (its reply will never arrive to clear it).

@@ -10,6 +10,15 @@ import type { Direction, MessageKind, Rule } from "../types.js";
 
 export type ValidationResult = { ok: true; rules: Rule[] } | { ok: false; errors: string[] };
 
+/** Options for {@link validateRuleFile}. */
+export interface ValidateOptions {
+  /** Extra action kinds to accept beyond the built-ins — the `kind`s registered
+   *  by `--rule-plugin` (§3.11). A rule referencing one of these passes with no
+   *  per-field checks (only the plugin knows its own schema) and any extra
+   *  fields are allowed. */
+  actionKinds?: string[];
+}
+
 const DIRECTIONS: Direction[] = ["client->server", "server->client"];
 const MESSAGE_KINDS: MessageKind[] = ["request", "response", "error", "notification", "unknown"];
 const ACTION_KINDS = [
@@ -104,7 +113,7 @@ function typeName(v: unknown): string {
 }
 
 /** Validate a whole rule file (already JSON-parsed). Collects every error. */
-export function validateRuleFile(data: unknown): ValidationResult {
+export function validateRuleFile(data: unknown, opts: ValidateOptions = {}): ValidationResult {
   if (!isPlainObject(data)) {
     return {
       ok: false,
@@ -122,13 +131,14 @@ export function validateRuleFile(data: unknown): ValidationResult {
   }
 
   const errors: string[] = [];
-  data.rules.forEach((rule, i) => validateRule(rule, `rules[${i}]`, errors));
+  const extraKinds = opts.actionKinds ?? [];
+  data.rules.forEach((rule, i) => validateRule(rule, `rules[${i}]`, errors, extraKinds));
 
   if (errors.length) return { ok: false, errors };
   return { ok: true, rules: data.rules as Rule[] };
 }
 
-function validateRule(rule: unknown, path: string, errors: string[]): void {
+function validateRule(rule: unknown, path: string, errors: string[], extraKinds: string[]): void {
   if (!isPlainObject(rule)) {
     errors.push(`${path}: must be an object (got ${typeName(rule)})`);
     return;
@@ -190,7 +200,7 @@ function validateRule(rule: unknown, path: string, errors: string[]): void {
     errors.push(`${path}: missing required "action"`);
     return;
   }
-  validateAction(rule.action, `${path}.action`, errors);
+  validateAction(rule.action, `${path}.action`, errors, extraKinds);
 }
 
 function validateWhen(when: unknown, path: string, errors: string[]): void {
@@ -208,7 +218,12 @@ function validateWhen(when: unknown, path: string, errors: string[]): void {
   }
 }
 
-function validateAction(action: unknown, path: string, errors: string[]): void {
+function validateAction(
+  action: unknown,
+  path: string,
+  errors: string[],
+  extraKinds: string[]
+): void {
   if (!isPlainObject(action)) {
     errors.push(`${path}: must be an object (got ${typeName(action)})`);
     return;
@@ -218,8 +233,12 @@ function validateAction(action: unknown, path: string, errors: string[]): void {
     return;
   }
   const kind = action.kind;
+  // A kind registered by a `--rule-plugin` (§3.11) is accepted as-is: the plugin
+  // owns its own schema, so we neither check its fields nor flag extra keys.
+  if (typeof kind === "string" && extraKinds.includes(kind)) return;
+  const knownKinds = extraKinds.length ? [...ACTION_KINDS, ...extraKinds] : ACTION_KINDS;
   if (typeof kind !== "string" || !ACTION_KINDS.includes(kind as (typeof ACTION_KINDS)[number])) {
-    errors.push(`${path}: unknown kind ${render(kind)}${suggest(String(kind), ACTION_KINDS)}`);
+    errors.push(`${path}: unknown kind ${render(kind)}${suggest(String(kind), knownKinds)}`);
     return;
   }
 

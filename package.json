@@ -34,12 +34,13 @@
     "examples",
     "payloads",
     "schema",
+    "templates",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "npm run build && node --test",
+    "test": "npm run build && node --test test/*.test.js",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",

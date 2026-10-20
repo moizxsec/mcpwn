@@ -7,7 +7,9 @@ import { inScope, type Scope } from "./scope.js";
 import { builtinLinters } from "../detect/linter.js";
 import { ArrayFindingsSink, writeFindingsDir, type Finding, type Severity } from "../findings.js";
 import { loadPayloads } from "../payloads/index.js";
+import { loadDetectorPlugin } from "../plugins/index.js";
 import { Logger } from "../logger.js";
+import type { Detector } from "../detect/detector.js";
 import type { FlowMessage } from "../types.js";
 
 /**
@@ -86,6 +88,8 @@ export interface ScanArgs {
   sampleMax: number;
   scopeMethods: string[];
   scopeTools: string[];
+  /** Custom passive detectors to load (`--detector <file.mjs>`, repeatable). */
+  detectorPlugins: string[];
 }
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -102,6 +106,7 @@ export function parseScanArgs(argv: string[]): ScanArgs {
     sampleMax: 3,
     scopeMethods: [],
     scopeTools: [],
+    detectorPlugins: [],
   };
   let i = 0;
   const value = (flag: string): string => {
@@ -166,6 +171,9 @@ export function parseScanArgs(argv: string[]): ScanArgs {
         break;
       case "--scope-tool":
         out.scopeTools.push(value(a));
+        break;
+      case "--detector":
+        out.detectorPlugins.push(value(a));
         break;
       default:
         if (a.startsWith("-")) {
@@ -689,10 +697,29 @@ export async function runScan(argv: string[]): Promise<number> {
   const logger = new Logger({ verbose: args.verbose, logFile: args.logFile });
   const findings = new ArrayFindingsSink();
   const scope = buildScanScope(args);
+
+  // Custom detectors (§3.11) run alongside the built-ins. Loading one RUNS LOCAL
+  // CODE (see plugins/index.ts) — only explicit --detector paths are loaded, and
+  // each is announced on startup. The pipeline isolates every detector call.
+  const detectors: Detector[] = builtinLinters();
+  for (const p of args.detectorPlugins) {
+    let d: Detector & { name: string };
+    try {
+      d = await loadDetectorPlugin(p);
+    } catch (err) {
+      logger.error((err as Error).message);
+      return 2;
+    }
+    logger.info(
+      `detector plugin loaded: ${d.name} <- ${p} (runs local code — trusted sources only)`
+    );
+    detectors.push(d);
+  }
+
   const pipeline = new MessagePipeline({
     rules: [],
     logger,
-    detectors: builtinLinters(),
+    detectors,
     findings,
     scope,
   });

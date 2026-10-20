@@ -19,6 +19,14 @@ import {
   captureBaseline,
 } from "./detect/baseline.js";
 import type { Detector } from "./detect/detector.js";
+import {
+  loadDetectorPlugin,
+  loadRuleActionPlugin,
+  buildActionRegistry,
+  type RuleActionPlugin,
+  type RuleActionRegistry,
+} from "./plugins/index.js";
+import { listTemplates, findTemplate, lintTemplates } from "./templates/index.js";
 import { builtinRedactPatterns, loadRedactPatterns, type RedactPattern } from "./redact.js";
 import type { Scope } from "./core/scope.js";
 import type { Direction, Rule } from "./types.js";
@@ -36,6 +44,7 @@ USAGE
   mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
   mcpwn report <session.jsonl> [--findings <dir>] -o report.html
   mcpwn payloads list | show <name>
+  mcpwn templates list | show <id> | lint [dir]
 
   Wraps a stdio MCP server: the host launches mcpwn, mcpwn launches the
   real server and relays traffic, logging every message to stderr.
@@ -45,10 +54,21 @@ OPTIONS
                         (forward / drop / edit / tamper). Needs a terminal.
                         (stdio only — disabled for HTTP in v2.)
   -r, --rule <file>     Load a JSON tamper-rule file (repeatable).
+      --template <id>   Load a bundled community template by id as a rule-pack
+                        (repeatable; see "mcpwn templates list").
   -l, --log <file>      Append a JSONL session log of all traffic.
   -v, --verbose         Pretty-print full message bodies to stderr.
   -h, --help            Show this help.
       --version         Print version.
+
+PLUGINS (§3.11 — extensibility; TRUST MODEL below)
+      --detector <file.mjs>     Load a custom passive detector (repeatable).
+      --rule-plugin <file.mjs>  Load a custom tamper-action handler whose "kind"
+                                rule files may then reference (repeatable).
+  TRUST: loading a plugin RUNS ARBITRARY LOCAL CODE (like a nuclei template or
+  an ESLint plugin). mcpwn only loads the explicit paths you pass, never
+  auto-discovers or fetches anything remote, and prints a notice per plugin on
+  startup. Point these flags only at code you wrote or have audited.
 
 DETECTION & REPORTING (§3.4, §3.5, §3.9)
       --findings-out <dir>   Write findings.json + findings.md + findings.sarif
@@ -87,8 +107,9 @@ SUBCOMMANDS
                                     critical|high|medium|low|info (default high),
                                     --timeout <ms>, --budget <ms>, --fuzz-max <n>,
                                     --sample-max <n>, --scope-method <glob>,
-                                    --scope-tool <name>, -l <file>, -v. Exits
-                                    nonzero when a finding meets --fail-on (CI).
+                                    --scope-tool <name>, --detector <file.mjs>,
+                                    -l <file>, -v. Exits nonzero when a finding
+                                    meets --fail-on (CI).
   report <session.jsonl> [--findings <dir>] -o report.html
                                     Render a recorded session (+ optional
                                     findings dir) into a SINGLE self-contained,
@@ -98,6 +119,12 @@ SUBCOMMANDS
                                     live server. Omit -o to write to stdout.
   payloads list                     List bundled payload libraries.
   payloads show <name>              Print a payload library (one per line).
+  templates list                    List bundled community templates (rule-packs)
+                                    as a table: id, name, severity, attack class.
+  templates show <id>               Print a template's metadata + rules.
+  templates lint [dir]              Validate every template in dir (default: the
+                                    bundled gallery) against the template schema.
+                                    Exits nonzero on any invalid template.
 
 EXAMPLES
   # Passive X-ray: watch all traffic, change nothing
@@ -113,6 +140,14 @@ EXAMPLES
   # Self-driving scan: point it at a server, fuzz it, fail CI on high findings
   mcpwn scan --fuzz --findings-out ./out -- node ./my-server.js
   mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
+
+  # Run a community template (rule-pack) against a server
+  mcpwn templates list
+  mcpwn --template tool-poisoning --findings-out ./out -- node ./my-server.js
+
+  # Extend mcpwn with a custom detector + a custom tamper action (local code!)
+  mcpwn --detector ./my-detector.mjs --rule-plugin ./my-action.mjs \\
+    -r uses-my-kind.json -- node ./my-server.js
 
   # Render a shareable HTML advisory from a recorded session + its findings
   mcpwn -l session.jsonl --findings-out ./out -- node ./my-server.js
@@ -130,6 +165,8 @@ CONFIG (in your MCP client) — wrap the existing command:
 /** Flags shared by the stdio proxy and the http subcommand. */
 export interface SharedArgs {
   ruleFiles: string[];
+  /** Community templates to load by id (resolved against the bundled gallery). */
+  templateIds: string[];
   logFile?: string;
   verbose: boolean;
   scopeMethods: string[];
@@ -142,6 +179,10 @@ export interface SharedArgs {
   baselineCapture?: string;
   redact: boolean;
   redactFile?: string;
+  /** Custom passive detectors to load (`--detector <file.mjs>`, repeatable). */
+  detectorPlugins: string[];
+  /** Custom tamper-action plugins to load (`--rule-plugin <file.mjs>`, repeatable). */
+  ruleActionPlugins: string[];
 }
 
 export interface ParsedArgs extends SharedArgs {
@@ -157,12 +198,15 @@ export class ArgError extends Error {}
 function emptyShared(): SharedArgs {
   return {
     ruleFiles: [],
+    templateIds: [],
     verbose: false,
     scopeMethods: [],
     scopeTools: [],
     onlyTampered: false,
     scopeAffectsLog: false,
     redact: false,
+    detectorPlugins: [],
+    ruleActionPlugins: [],
   };
 }
 
@@ -182,6 +226,15 @@ function parseSharedFlag(a: string, argv: string[], i: number, out: SharedArgs):
     case "-r":
     case "--rule":
       out.ruleFiles.push(need("a <file> argument"));
+      return i;
+    case "--template":
+      out.templateIds.push(need("a <id> argument"));
+      return i;
+    case "--detector":
+      out.detectorPlugins.push(need("a <file.mjs> argument"));
+      return i;
+    case "--rule-plugin":
+      out.ruleActionPlugins.push(need("a <file.mjs> argument"));
       return i;
     case "-l":
     case "--log":
@@ -369,6 +422,91 @@ function runPayloads(args: string[]): number {
   return 2;
 }
 
+/** `mcpwn templates list | show <id> | lint [dir]` — the community gallery
+ *  (§3.12). Mirrors `payloads`: `list` prints a table, `show` pretty-prints a
+ *  template's metadata + rules, `lint` validates a directory of templates against
+ *  schema/templates.schema.json (the contribution flow). */
+function runTemplates(args: string[]): number {
+  const action = args[0] ?? "list";
+
+  if (action === "list") {
+    const items = listTemplates();
+    if (items.length === 0) {
+      process.stderr.write("mcpwn templates: no templates found\n");
+      return 0;
+    }
+    const headers = ["ID", "NAME", "SEVERITY", "ATTACK CLASS"];
+    const rows = items.map((t) => [t.id, t.info.name, t.info.severity, t.info.attackClass]);
+    const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i].length)));
+    const fmt = (cols: string[]): string =>
+      cols
+        .map((c, i) => c.padEnd(widths[i]))
+        .join("  ")
+        .trimEnd();
+    process.stdout.write(fmt(headers) + "\n");
+    for (const r of rows) process.stdout.write(fmt(r) + "\n");
+    return 0;
+  }
+
+  if (action === "show") {
+    const id = args[1];
+    if (!id) {
+      process.stderr.write("mcpwn templates show: missing <id>\n");
+      return 2;
+    }
+    const t = findTemplate(id);
+    if (!t) {
+      const ids = listTemplates()
+        .map((x) => x.id)
+        .join(", ");
+      process.stderr.write(`mcpwn templates: unknown template "${id}" (available: ${ids})\n`);
+      return 2;
+    }
+    const w = process.stdout;
+    w.write(`id:          ${t.id}\n`);
+    w.write(`name:        ${t.info.name}\n`);
+    w.write(`severity:    ${t.info.severity}\n`);
+    w.write(`attackClass: ${t.info.attackClass}\n`);
+    w.write(`author:      ${t.info.author}\n`);
+    if (t.info.cwe) w.write(`cwe:         ${t.info.cwe}\n`);
+    if (t.info.mcpVersion) w.write(`mcpVersion:  ${t.info.mcpVersion}\n`);
+    w.write(`description: ${t.info.description}\n`);
+    if (t.info.references?.length) {
+      w.write(`references:\n`);
+      for (const r of t.info.references) w.write(`  - ${r}\n`);
+    }
+    w.write(`\nrules:\n${JSON.stringify(t.rules, null, 2)}\n`);
+    return 0;
+  }
+
+  if (action === "lint") {
+    const results = lintTemplates(args[1]);
+    if (results.length === 0) {
+      process.stderr.write("mcpwn templates lint: no .json templates found\n");
+      return 0;
+    }
+    let failed = 0;
+    for (const r of results) {
+      if (r.ok) {
+        process.stdout.write(`ok    ${r.file}${r.id ? ` (${r.id})` : ""}\n`);
+      } else {
+        failed++;
+        process.stdout.write(`FAIL  ${r.file}\n`);
+        for (const e of r.errors) process.stdout.write(`        - ${e}\n`);
+      }
+    }
+    process.stderr.write(
+      `\nmcpwn templates lint: ${results.length - failed}/${results.length} ok\n`
+    );
+    return failed ? 2 : 0;
+  }
+
+  process.stderr.write(
+    `mcpwn templates: unknown subcommand "${action}" (use "list", "show <id>" or "lint [dir]")\n`
+  );
+  return 2;
+}
+
 /** `mcpwn baseline capture [--out <file>] [-v] -- <command> [args...]` */
 async function runBaseline(argv: string[]): Promise<number> {
   const sub = argv[0];
@@ -438,14 +576,21 @@ interface DetectionLayer {
 
 /** Build the detector list + findings sink shared by both transports, and a
  *  synchronous writer to run on process exit. */
-function buildDetection(a: SharedArgs, logger: Logger): DetectionLayer {
+function buildDetection(
+  a: SharedArgs,
+  logger: Logger,
+  pluginDetectors: Detector[] = []
+): DetectionLayer {
   const detectors: Detector[] = [];
-  const needSink = !!a.findingsOut || !!a.baselineFile;
+  const needSink = !!a.findingsOut || !!a.baselineFile || pluginDetectors.length > 0;
   const findings = needSink ? new ArrayFindingsSink() : undefined;
 
   if (a.findingsOut) detectors.push(...builtinLinters());
   if (a.baselineFile) detectors.push(new BaselineDetector(loadBaseline(a.baselineFile)));
   if (a.baselineCapture) detectors.push(new BaselineCaptureDetector(a.baselineCapture, logger));
+  // Custom detectors (§3.11) run alongside the built-ins; the pipeline wraps each
+  // in the same read-only try/catch, so a throwing plugin can't block the wire.
+  detectors.push(...pluginDetectors);
 
   const writeOnExit = () => {
     if (!findings) return;
@@ -481,17 +626,71 @@ function buildScope(a: SharedArgs): Scope | undefined {
   };
 }
 
-function loadAllRules(files: string[], logger: Logger): Rule[] {
+/** Load every tamper rule from -r files AND --template ids. `actionKinds` are the
+ *  custom kinds registered by any --rule-plugin, so a rule file may reference one
+ *  without tripping validation (§3.11). Exits 2 on any load/validation error. */
+function loadAllRules(a: SharedArgs, logger: Logger, actionKinds: string[]): Rule[] {
   let rules: Rule[] = [];
-  for (const f of files) {
+  for (const f of a.ruleFiles) {
     try {
-      rules = rules.concat(loadRules(f));
+      rules = rules.concat(loadRules(f, actionKinds));
     } catch (err) {
       logger.error(`could not load rule file "${f}": ${(err as Error).message}`);
       process.exit(2);
     }
   }
+  for (const id of a.templateIds) {
+    const tmpl = findTemplate(id);
+    if (!tmpl) {
+      logger.error(`unknown template "${id}" — run "mcpwn templates list" to see available ids`);
+      process.exit(2);
+    }
+    rules = rules.concat(tmpl.rules);
+  }
   return rules;
+}
+
+interface LoadedPlugins {
+  detectors: (Detector & { name: string })[];
+  actionRegistry: RuleActionRegistry;
+}
+
+/**
+ * Load the `--detector` and `--rule-plugin` modules, printing a one-line startup
+ * notice per plugin (trust model: loading runs local code — see plugins/index.ts).
+ * Exits 2 with a clear message when a plugin is missing or does not implement its
+ * interface. Never fetches anything remote; only explicit CLI paths are loaded.
+ */
+async function loadPlugins(a: SharedArgs, logger: Logger): Promise<LoadedPlugins> {
+  const detectors: (Detector & { name: string })[] = [];
+  for (const p of a.detectorPlugins) {
+    let d: Detector & { name: string };
+    try {
+      d = await loadDetectorPlugin(p);
+    } catch (err) {
+      logger.error((err as Error).message);
+      process.exit(2);
+    }
+    logger.info(
+      `detector plugin loaded: ${d.name} <- ${p} (runs local code — trusted sources only)`
+    );
+    detectors.push(d);
+  }
+  const actions: RuleActionPlugin[] = [];
+  for (const p of a.ruleActionPlugins) {
+    let rp: RuleActionPlugin;
+    try {
+      rp = await loadRuleActionPlugin(p);
+    } catch (err) {
+      logger.error((err as Error).message);
+      process.exit(2);
+    }
+    logger.info(
+      `rule-plugin loaded: kind "${rp.kind}" <- ${p} (runs local code — trusted sources only)`
+    );
+    actions.push(rp);
+  }
+  return { detectors, actionRegistry: buildActionRegistry(actions) };
 }
 
 async function runHttp(argv: string[]): Promise<number> {
@@ -519,10 +718,11 @@ async function runHttp(argv: string[]): Promise<number> {
     logger.info("interactive intercept (-i) is disabled for HTTP in v2 — ignoring");
   }
 
-  const rules = loadAllRules(parsed.ruleFiles, logger);
+  const plugins = await loadPlugins(parsed, logger);
+  const rules = loadAllRules(parsed, logger, [...plugins.actionRegistry.keys()]);
   let detection: DetectionLayer;
   try {
-    detection = buildDetection(parsed, logger);
+    detection = buildDetection(parsed, logger, plugins.detectors);
   } catch (err) {
     logger.error((err as Error).message);
     return 2;
@@ -536,6 +736,7 @@ async function runHttp(argv: string[]): Promise<number> {
     scopeAffectsLog: parsed.scopeAffectsLog,
     detectors: detection.detectors,
     findings: detection.findings,
+    ruleActionPlugins: plugins.actionRegistry,
     holdTimeoutMs: 0, // interactive disabled for HTTP; plumbed for completeness
   });
 
@@ -557,6 +758,7 @@ async function main() {
   // Subcommands are dispatched before option parsing so their bare first token
   // is not mistaken for the proxied command.
   if (argv[0] === "payloads") process.exit(runPayloads(argv.slice(1)));
+  if (argv[0] === "templates") process.exit(runTemplates(argv.slice(1)));
   if (argv[0] === "replay") process.exit(await runReplay(argv.slice(1)));
   if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
   if (argv[0] === "report") process.exit(await runReport(argv.slice(1)));
@@ -601,11 +803,12 @@ async function main() {
   }
 
   const logger = new Logger({ logFile: parsed.logFile, verbose: parsed.verbose, redactPatterns });
-  const rules = loadAllRules(parsed.ruleFiles, logger);
+  const plugins = await loadPlugins(parsed, logger);
+  const rules = loadAllRules(parsed, logger, [...plugins.actionRegistry.keys()]);
 
   let detection: DetectionLayer;
   try {
-    detection = buildDetection(parsed, logger);
+    detection = buildDetection(parsed, logger, plugins.detectors);
   } catch (err) {
     logger.error((err as Error).message);
     process.exit(2);
@@ -622,6 +825,7 @@ async function main() {
     scopeAffectsLog: parsed.scopeAffectsLog,
     detectors: detection.detectors,
     findings: detection.findings,
+    ruleActionPlugins: plugins.actionRegistry,
   });
   const transport = new StdioTransport({
     command: parsed.command,

@@ -3,6 +3,7 @@ import type { Direction, FlowMessage, Rule, RuleAction } from "../types.js";
 import { validateRuleFile } from "./validate.js";
 import { setPath } from "./jsonpath.js";
 import { loadPayloads } from "../payloads/index.js";
+import type { RuleActionRegistry } from "../plugins/index.js";
 
 export interface RuleResult {
   /** The (possibly rewritten) JSON to forward, or null to DROP the message. */
@@ -57,6 +58,10 @@ interface ApplyContext {
   method?: string;
   /** Advance and return this rule's fuzz cursor. */
   nextFuzzIndex: () => number;
+  /** Custom action kinds registered via `--rule-plugin` (§3.11). Consulted when
+   *  an action kind is not one of the built-ins. Undefined when no plugins are
+   *  loaded, so the engine behaves exactly as before. */
+  actionPlugins?: RuleActionRegistry;
 }
 
 /** Minimal logging surface used for rule-failure reporting; the real Logger
@@ -65,9 +70,12 @@ export interface RuleLogger {
   error(text: string): void;
 }
 
-export function loadRules(path: string): Rule[] {
+export function loadRules(path: string, extraActionKinds?: string[]): Rule[] {
   const data = JSON.parse(readFileSync(path, "utf8"));
-  const result = validateRuleFile(data);
+  // `extraActionKinds` are custom kinds registered via `--rule-plugin` (§3.11);
+  // the validator accepts them (with no field checks, since only the plugin
+  // knows its own schema) instead of rejecting them as unknown.
+  const result = validateRuleFile(data, { actionKinds: extraActionKinds });
   if (!result.ok) {
     // Surface every problem at once; the CLI logs this and exits 2.
     throw new Error(`invalid rule file:\n  - ${result.errors.join("\n  - ")}`);
@@ -325,11 +333,34 @@ function applyAction(action: RuleAction, json: any, ctx: ApplyContext): boolean 
     }
 
     default: {
-      // Unreachable for well-formed rules (the loader validates kinds), but an
-      // unknown kind must FAIL LOUD here rather than silently no-op: the per-rule
+      // Unknown to the built-in switch. First see whether a loaded plugin (§3.11)
+      // claims this kind; a custom action gets the SAME treatment as a built-in —
+      // it self-gates on ctx.direction/method (scope) and any throw is rolled
+      // back by applyRules below. The plugin is handed a deep CLONE of the
+      // message, so it only takes effect by RETURNING the mutated JSON (a
+      // functional contract — mutating the clone and returning undefined is a
+      // deliberate no-op), mirroring how a built-in returns `changed`.
+      const kind = (action as { kind?: unknown }).kind;
+      const plugin = typeof kind === "string" ? ctx.actionPlugins?.get(kind) : undefined;
+      if (plugin) {
+        const clone = JSON.parse(JSON.stringify(json));
+        const next = plugin.apply(
+          { direction: ctx.direction, method: ctx.method, message: clone },
+          action as unknown as Record<string, unknown>
+        );
+        if (next === undefined || next === null) return false;
+        if (typeof next !== "object" || Array.isArray(next)) {
+          throw new Error(
+            `rule-plugin "${kind}" must return a JSON object message (got ${typeof next})`
+          );
+        }
+        for (const k of Object.keys(json)) delete json[k];
+        Object.assign(json, next);
+        return true;
+      }
+      // Truly unknown kind: FAIL LOUD rather than silently no-op. The per-rule
       // try/catch in applyRules turns this throw into a logged error and forwards
       // the message untampered, so the wire is never blocked (NFR-8).
-      const kind = (action as { kind?: unknown }).kind;
       throw new Error(`unknown action kind: ${String(kind)}`);
     }
   }
@@ -349,7 +380,8 @@ export function applyRules(
   msg: FlowMessage,
   logger?: RuleLogger,
   fuzz?: FuzzState,
-  state?: RuleState
+  state?: RuleState,
+  actionPlugins?: RuleActionRegistry
 ): RuleResult {
   if (!msg.json) return { json: msg.json, applied: [], changed: false };
 
@@ -381,6 +413,7 @@ export function applyRules(
       // Cursor keyed per rule name; falls back to 0 when no state is threaded
       // (e.g. a unit test), so a stateless caller always gets the first payload.
       nextFuzzIndex: () => (fuzz ? fuzz.next(rule.name) : 0),
+      actionPlugins,
     };
 
     // Snapshot before the (mutating) action so a throw rolls back cleanly.

@@ -64,8 +64,9 @@ const SEVERITY_ORDER: Record<Severity, number> = {
   info: 4,
 };
 
-/** Most-severe first; ties keep insertion order (stable sort). */
-function bySeverity(findings: Finding[]): Finding[] {
+/** Most-severe first; ties keep insertion order (stable sort). Exported so
+ *  other writers (e.g. the HTML report) order findings identically. */
+export function bySeverity(findings: Finding[]): Finding[] {
   return findings
     .map((f, i) => ({ f, i }))
     .sort((a, b) => {

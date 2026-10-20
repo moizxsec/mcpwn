@@ -9,6 +9,7 @@ import { Logger } from "./logger.js";
 import { loadPayloads, listPayloads } from "./payloads/index.js";
 import { runReplay } from "./replay.js";
 import { runScan } from "./core/scan.js";
+import { runReport } from "./report.js";
 import { ArrayFindingsSink, writeFindingsDir, type FindingsSink } from "./findings.js";
 import { builtinLinters } from "./detect/linter.js";
 import {
@@ -33,6 +34,7 @@ USAGE
   mcpwn baseline capture [--out <file>] [options] -- <command> [args...]
   mcpwn replay <session.jsonl> [options] -- <command> [args...]
   mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
+  mcpwn report <session.jsonl> [--findings <dir>] -o report.html
   mcpwn payloads list | show <name>
 
   Wraps a stdio MCP server: the host launches mcpwn, mcpwn launches the
@@ -87,6 +89,13 @@ SUBCOMMANDS
                                     --sample-max <n>, --scope-method <glob>,
                                     --scope-tool <name>, -l <file>, -v. Exits
                                     nonzero when a finding meets --fail-on (CI).
+  report <session.jsonl> [--findings <dir>] -o report.html
+                                    Render a recorded session (+ optional
+                                    findings dir) into a SINGLE self-contained,
+                                    zero-dependency HTML advisory: header + stats,
+                                    findings by severity, session timeline, and
+                                    side-by-side tamper diffs. A static file — no
+                                    live server. Omit -o to write to stdout.
   payloads list                     List bundled payload libraries.
   payloads show <name>              Print a payload library (one per line).
 
@@ -104,6 +113,10 @@ EXAMPLES
   # Self-driving scan: point it at a server, fuzz it, fail CI on high findings
   mcpwn scan --fuzz --findings-out ./out -- node ./my-server.js
   mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
+
+  # Render a shareable HTML advisory from a recorded session + its findings
+  mcpwn -l session.jsonl --findings-out ./out -- node ./my-server.js
+  mcpwn report session.jsonl --findings ./out -o report.html
 
   # Reverse-proxy a remote HTTP MCP server
   mcpwn http --listen 127.0.0.1:8900 --upstream https://mcp.example.com/mcp \\
@@ -546,6 +559,7 @@ async function main() {
   if (argv[0] === "payloads") process.exit(runPayloads(argv.slice(1)));
   if (argv[0] === "replay") process.exit(await runReplay(argv.slice(1)));
   if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
+  if (argv[0] === "report") process.exit(await runReport(argv.slice(1)));
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));
   if (argv[0] === "http") process.exit(await runHttp(argv.slice(1)));
 

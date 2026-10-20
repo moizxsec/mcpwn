@@ -6,6 +6,8 @@ import {
   writeMarkdown,
   writeSarif,
   sarifLevel,
+  fingerprint,
+  FINGERPRINT_KEY,
 } from "../dist/findings.js";
 
 const sample = [
@@ -61,6 +63,37 @@ test("SARIF emits one rule per distinct id and maps result levels", () => {
   const names = poison.logicalLocations.map((l) => l.name);
   assert.ok(names.includes("tools/list"));
   assert.ok(names.includes("read_file"));
+});
+
+test("SARIF results carry a stable partialFingerprint on every result", () => {
+  const sarif = JSON.parse(writeSarif(sample));
+  const results = sarif.runs[0].results;
+  assert.equal(results.length, 4);
+  for (const r of results) {
+    const fp = r.partialFingerprints?.[FINGERPRINT_KEY];
+    assert.ok(fp, "every result must carry a partialFingerprint");
+    assert.match(fp, /^[0-9a-f]{64}$/, "fingerprint is a sha256 hex digest");
+  }
+});
+
+test("SARIF fingerprints are identical across two runs of identical input", () => {
+  const a = JSON.parse(writeSarif(sample)).runs[0].results.map(
+    (r) => r.partialFingerprints[FINGERPRINT_KEY]
+  );
+  const b = JSON.parse(writeSarif(sample)).runs[0].results.map(
+    (r) => r.partialFingerprints[FINGERPRINT_KEY]
+  );
+  assert.deepEqual(a, b, "same findings -> same fingerprints (no CI alert churn)");
+});
+
+test("fingerprint keys on id+method+tool+evidence, differing when those differ", () => {
+  const base = { id: "x", title: "t", severity: "high", method: "tools/call", tool: "a", evidence: "e" };
+  const same = { ...base, title: "DIFFERENT TITLE", severity: "low" }; // non-keyed fields
+  assert.equal(fingerprint(base), fingerprint(same), "title/severity do not affect the fingerprint");
+  assert.notEqual(fingerprint(base), fingerprint({ ...base, evidence: "other" }));
+  assert.notEqual(fingerprint(base), fingerprint({ ...base, tool: "b" }));
+  assert.notEqual(fingerprint(base), fingerprint({ ...base, method: "tools/list" }));
+  assert.notEqual(fingerprint(base), fingerprint({ ...base, id: "y" }));
 });
 
 test("Markdown includes title, severity and evidence", () => {

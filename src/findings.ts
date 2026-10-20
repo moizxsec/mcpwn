@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Direction } from "./types.js";
 
@@ -146,6 +147,22 @@ export function writeMarkdown(findings: Finding[]): string {
 
 type SarifLevel = "error" | "warning" | "note";
 
+/** SARIF `partialFingerprints` key — versioned so the hashing basis can change
+ *  later without silently colliding with old fingerprints. */
+export const FINGERPRINT_KEY = "mcpwn/v1";
+
+/**
+ * A stable, content-addressed fingerprint for a finding (detector id + method +
+ * tool + evidence). SARIF consumers (GitHub code-scanning, Azure DevOps, …)
+ * use `partialFingerprints` to track "the same" alert across runs, so an
+ * unchanged finding never churns as resolved-then-reopened between scans. It is
+ * deterministic: identical inputs always hash to the same hex, two runs apart.
+ */
+export function fingerprint(f: Finding): string {
+  const basis = [f.id, f.method ?? "", f.tool ?? "", f.evidence ?? ""].join("\u0000");
+  return createHash("sha256").update(basis).digest("hex");
+}
+
 /** critical/high → error, medium → warning, low/info → note (§3.5). */
 export function sarifLevel(severity: Severity): SarifLevel {
   switch (severity) {
@@ -186,6 +203,8 @@ export function writeSarif(findings: Finding[]): string {
       ruleIndex: ruleIndex.get(f.id),
       level: sarifLevel(f.severity),
       message: { text },
+      // Stable across runs so CI de-dupes unchanged findings (no alert churn).
+      partialFingerprints: { [FINGERPRINT_KEY]: fingerprint(f) },
     };
     if (logicalLocations.length) result.logicalLocations = logicalLocations;
     return result;

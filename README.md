@@ -7,8 +7,11 @@
   <img src="https://raw.githubusercontent.com/moizxsec/mcpwn/main/assets/demo.gif?v=0.2.0" alt="mcpwn tampers a tool result in flight; the agent obeys the injected instruction and exfiltrates a secret" width="760">
 </p>
 
+[![npm version](https://img.shields.io/npm/v/@moizxsec/mcpwn.svg)](https://www.npmjs.com/package/@moizxsec/mcpwn)
+[![npm downloads](https://img.shields.io/npm/dm/@moizxsec/mcpwn.svg)](https://www.npmjs.com/package/@moizxsec/mcpwn)
+[![CI](https://github.com/moizxsec/mcpwn/actions/workflows/ci.yml/badge.svg)](https://github.com/moizxsec/mcpwn/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a.svg)](https://nodejs.org)
+[![node](https://img.shields.io/node/v/@moizxsec/mcpwn.svg)](https://nodejs.org)
 
 > ⚠️ **Authorized testing only.** mcpwn is an offensive-security tool in the same category as Burp Suite and mitmproxy. Use it on agents and servers **you own or are explicitly authorized to assess**.
 
@@ -182,6 +185,56 @@ mcpwn payloads show path-traversal
 | `mcpwn replay <session.jsonl> -- <cmd>` | Replay recorded `client->server` traffic through a fresh server. |
 | `mcpwn payloads list` / `show <name>` | List / print the bundled payload libraries. |
 
+## Active scanning, reporting & templates
+
+Beyond the live proxy, mcpwn ships a self-driving scanner, a shareable report
+generator, a nuclei-style template gallery, and a bundled vulnerable-server
+suite — the pieces you reach for in CI and in a write-up.
+
+```bash
+# Self-driving active scan — NO agent in the loop. Drives the handshake,
+# enumerates every surface (tools/resources/prompts, paginated), samples
+# content, runs all passive detectors, and fails CI on findings.
+mcpwn scan --fuzz --findings-out ./out --fail-on high -- node ./my-server.js
+mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
+
+# Render a recorded session (+ findings) into ONE self-contained HTML advisory
+mcpwn report session.jsonl --findings ./out -o report.html
+
+# Run a community template (rule-pack) against a server
+mcpwn templates list
+mcpwn --template tool-poisoning --findings-out ./out -- node ./my-server.js
+```
+
+| Command | What it does |
+| --- | --- |
+| `mcpwn scan` | Active, agent-free scanner over stdio or HTTP: paginated enumeration, content sampling, optional `--fuzz`, and a `--fail-on` CI gate. Emits JSON / Markdown / **SARIF** (with stable `partialFingerprints`, so code-scanning de-dupes across runs). |
+| `mcpwn report` | Turns a session log + findings dir into a single zero-dependency **HTML advisory** (header stats, findings by severity, side-by-side tamper diffs). A static file — no live server. |
+| `mcpwn templates` | Community rule-pack **gallery** (`list` / `show <id>` / `lint`); load one into any run with `--template <id>`. |
+| `examples/dvmcp` | **Damn-Vulnerable MCP** — one intentionally-broken server per attack class (path-traversal, SSRF, command-injection, tool-poisoning, rug-pull, sampling-abuse, …) plus a scoreboard. Run `npm run dvmcp`. |
+
+Custom **detector** and **rule-action plugins** (`--detector` / `--rule-plugin`,
+both load local code you wrote or audited) extend the proxy and the scanner
+alike.
+
+### Config file
+
+Commit a baseline invocation instead of retyping flags. Drop a
+`mcpwn.config.json` next to your server and mcpwn auto-loads it (opt out with
+`--no-auto-config`, or point elsewhere with `--config <file>`). Precedence is
+**defaults < config < CLI flags**, so a flag always wins.
+
+```jsonc
+{
+  "$schema": "./schema/config.schema.json",
+  "rules": ["attack.json"],
+  "scope": { "methods": ["tools/*"], "direction": "s2c" },
+  "redact": true,
+  "findingsOut": "./out",
+  "failOn": "high"
+}
+```
+
 ## Tamper rules
 
 Rules are plain JSON, loadable from any file so you can build and share payload sets without touching code.
@@ -311,7 +364,7 @@ and disclose responsibly.
 
 Issues and PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the layout, the invariants, and how to add a new rule kind or transport. For anything you find against third-party MCP servers, please follow [SECURITY.md](./SECURITY.md) and disclose responsibly.
 
-Generate the browsable **API reference** locally with `npm run docs:api` (TypeDoc → `docs/api/`, git-ignored). Zero runtime dependencies; dev tooling is ESLint + Prettier + c8 + TypeDoc (`npm run lint` / `format` / `coverage` / `docs:api`).
+The browsable **API reference** is published to [GitHub Pages](https://moizxsec.github.io/mcpwn/) on every push to `main` (TypeDoc); generate it locally with `npm run docs:api` (→ `docs/api/`, git-ignored). Zero runtime dependencies; dev tooling is ESLint + Prettier + c8 + TypeDoc (`npm run lint` / `format` / `coverage` / `docs:api`).
 
 ## License
 

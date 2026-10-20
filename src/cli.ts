@@ -28,6 +28,13 @@ import {
 } from "./plugins/index.js";
 import { listTemplates, findTemplate, lintTemplates } from "./templates/index.js";
 import { builtinRedactPatterns, loadRedactPatterns, type RedactPattern } from "./redact.js";
+import {
+  loadConfig,
+  resolveConfigPath,
+  preScanConfigFlags,
+  ConfigError,
+  type McpwnConfig,
+} from "./config.js";
 import type { Scope } from "./core/scope.js";
 import type { Direction, Rule } from "./types.js";
 
@@ -60,6 +67,12 @@ OPTIONS
   -v, --verbose         Pretty-print full message bodies to stderr.
   -h, --help            Show this help.
       --version         Print version.
+
+CONFIG (§3.13 — commit a baseline invocation; CLI flags still override it)
+      --config <file>   Load a mcpwn.config.json (rules, scope, redact, findings
+                        output, fail-on). Precedence: defaults < config < flags.
+      --no-auto-config  Do NOT auto-load ./mcpwn.config.json (it is loaded by
+                        default, with a notice, when present in the cwd).
 
 PLUGINS (§3.11 — extensibility; TRUST MODEL below)
       --detector <file.mjs>     Load a custom passive detector (repeatable).
@@ -274,13 +287,69 @@ function parseSharedFlag(a: string, argv: string[], i: number, out: SharedArgs):
     case "--scope-affects-log":
       out.scopeAffectsLog = true;
       return i;
+    // Config flags are resolved in a pre-scan (so the config can seed defaults
+    // BEFORE the rest of the args parse); consume them here so they are not
+    // rejected as unknown. --config takes a value; --no-auto-config is a toggle.
+    case "--config":
+      need("a <file> argument");
+      return i;
+    case "--no-auto-config":
+      return i;
     default:
       return null;
   }
 }
 
-export function parseArgs(argv: string[]): ParsedArgs | "help" | "version" {
-  const out: ParsedArgs = { ...emptyShared(), intercept: false, commandArgs: [] };
+/** Seed a SharedArgs from a loaded config (defaults < config layer). The CLI
+ *  parse then runs on top: list flags append, scalar flags override. */
+export function sharedFromConfig(config?: McpwnConfig): SharedArgs {
+  const base = emptyShared();
+  if (!config) return base;
+  if (config.rules) base.ruleFiles.push(...config.rules);
+  if (config.templates) base.templateIds.push(...config.templates);
+  if (config.scope?.methods) base.scopeMethods.push(...config.scope.methods);
+  if (config.scope?.tools) base.scopeTools.push(...config.scope.tools);
+  if (config.scope?.direction) {
+    base.scopeDirection = config.scope.direction === "c2s" ? "client->server" : "server->client";
+  }
+  if (config.redact) base.redact = true;
+  if (config.redactFile) base.redactFile = config.redactFile;
+  if (config.findingsOut) base.findingsOut = config.findingsOut;
+  if (config.log) base.logFile = config.log;
+  if (config.verbose) base.verbose = true;
+  return base;
+}
+
+/**
+ * Resolve + load the config for a CLI invocation. Returns the parsed config (if
+ * any), the SharedArgs seed it produces, and a notice string to print once a
+ * logger exists. Exits 2 (via the supplied `fail`) on a malformed config.
+ */
+export function resolveConfig(
+  argv: string[],
+  fail: (msg: string) => never
+): { config?: McpwnConfig; seed: SharedArgs; notice?: string } {
+  const pre = preScanConfigFlags(argv);
+  const chosen = resolveConfigPath({ explicit: pre.configFile, noAuto: pre.noAuto });
+  if (!chosen) return { seed: emptyShared() };
+  let config: McpwnConfig;
+  try {
+    config = loadConfig(chosen.path);
+  } catch (err) {
+    if (err instanceof ConfigError) fail(err.message);
+    throw err;
+  }
+  const notice = chosen.auto
+    ? `loaded ${chosen.path} (auto; pass --no-auto-config to skip)`
+    : `loaded config ${chosen.path}`;
+  return { config, seed: sharedFromConfig(config), notice };
+}
+
+export function parseArgs(
+  argv: string[],
+  base: SharedArgs = emptyShared()
+): ParsedArgs | "help" | "version" {
+  const out: ParsedArgs = { ...base, intercept: false, commandArgs: [] };
   let i = 0;
   for (; i < argv.length; i++) {
     const a = argv[i];
@@ -325,8 +394,8 @@ export interface HttpArgs extends SharedArgs {
   interceptRequested: boolean;
 }
 
-export function parseHttpArgs(argv: string[]): HttpArgs {
-  const shared = emptyShared();
+export function parseHttpArgs(argv: string[], base: SharedArgs = emptyShared()): HttpArgs {
+  const shared = base;
   let listen: string | undefined;
   let upstream: string | undefined;
   let mode: HttpMode = "auto";
@@ -694,9 +763,22 @@ async function loadPlugins(a: SharedArgs, logger: Logger): Promise<LoadedPlugins
 }
 
 async function runHttp(argv: string[]): Promise<number> {
+  let configNotice: string | undefined;
+  let seed: SharedArgs | undefined;
+  try {
+    const cfg = resolveConfig(argv, (msg) => {
+      throw new ConfigError(msg);
+    });
+    seed = cfg.seed;
+    configNotice = cfg.notice;
+  } catch (err) {
+    process.stderr.write(`mcpwn: ${(err as Error).message}\n`);
+    return 2;
+  }
+
   let parsed: HttpArgs;
   try {
-    parsed = parseHttpArgs(argv);
+    parsed = parseHttpArgs(argv, seed);
   } catch (err) {
     if (err instanceof ArgError) {
       process.stderr.write(`mcpwn: ${err.message}\n`);
@@ -714,6 +796,7 @@ async function runHttp(argv: string[]): Promise<number> {
   }
 
   const logger = new Logger({ logFile: parsed.logFile, verbose: parsed.verbose, redactPatterns });
+  if (configNotice) logger.info(configNotice);
   if (parsed.interceptRequested) {
     logger.info("interactive intercept (-i) is disabled for HTTP in v2 — ignoring");
   }
@@ -765,9 +848,14 @@ async function main() {
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));
   if (argv[0] === "http") process.exit(await runHttp(argv.slice(1)));
 
+  const cfg = resolveConfig(argv, (msg) => {
+    process.stderr.write(`mcpwn: ${msg}\n`);
+    process.exit(2);
+  });
+
   let parsed: ParsedArgs | "help" | "version";
   try {
-    parsed = parseArgs(argv);
+    parsed = parseArgs(argv, cfg.seed);
   } catch (err) {
     if (err instanceof ArgError) {
       process.stderr.write(`mcpwn: ${err.message}\n\n`);
@@ -803,6 +891,7 @@ async function main() {
   }
 
   const logger = new Logger({ logFile: parsed.logFile, verbose: parsed.verbose, redactPatterns });
+  if (cfg.notice) logger.info(cfg.notice);
   const plugins = await loadPlugins(parsed, logger);
   const rules = loadAllRules(parsed, logger, [...plugins.actionRegistry.keys()]);
 
@@ -826,6 +915,13 @@ async function main() {
     detectors: detection.detectors,
     findings: detection.findings,
     ruleActionPlugins: plugins.actionRegistry,
+  });
+
+  // Compact end-of-session tally on exit (stderr only — the MCP stdout channel
+  // is never touched). Registered after the findings writer so findings are
+  // flushed to disk before the summary counts them.
+  process.on("exit", () => {
+    logger.sessionSummary(pipeline.summary(), detection.findings?.all() ?? []);
   });
   const transport = new StdioTransport({
     command: parsed.command,

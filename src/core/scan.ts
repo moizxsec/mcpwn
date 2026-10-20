@@ -9,6 +9,7 @@ import { ArrayFindingsSink, writeFindingsDir, type Finding, type Severity } from
 import { loadPayloads } from "../payloads/index.js";
 import { loadDetectorPlugin } from "../plugins/index.js";
 import { Logger } from "../logger.js";
+import { loadConfig, resolveConfigPath, preScanConfigFlags } from "../config.js";
 import type { Detector } from "../detect/detector.js";
 import type { FlowMessage } from "../types.js";
 
@@ -90,6 +91,8 @@ export interface ScanArgs {
   scopeTools: string[];
   /** Custom passive detectors to load (`--detector <file.mjs>`, repeatable). */
   detectorPlugins: string[];
+  /** One-line notice to log when a config file was loaded (§3.13). */
+  configNotice?: string;
 }
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -108,6 +111,29 @@ export function parseScanArgs(argv: string[]): ScanArgs {
     scopeTools: [],
     detectorPlugins: [],
   };
+
+  // Config seeds the defaults BEFORE flag parsing, so CLI flags still override
+  // it (defaults < config < flags, §3.13). Covers the scan-relevant keys.
+  const pre = preScanConfigFlags(argv);
+  const chosen = resolveConfigPath({ explicit: pre.configFile, noAuto: pre.noAuto });
+  if (chosen) {
+    let config;
+    try {
+      config = loadConfig(chosen.path);
+    } catch (err) {
+      throw new ScanArgError((err as Error).message);
+    }
+    if (config.failOn) out.failOn = config.failOn;
+    if (config.findingsOut) out.findingsOut = config.findingsOut;
+    if (config.scope?.methods) out.scopeMethods.push(...config.scope.methods);
+    if (config.scope?.tools) out.scopeTools.push(...config.scope.tools);
+    if (config.log) out.logFile = config.log;
+    if (config.verbose) out.verbose = true;
+    out.configNotice = chosen.auto
+      ? `loaded ${chosen.path} (auto; pass --no-auto-config to skip)`
+      : `loaded config ${chosen.path}`;
+  }
+
   let i = 0;
   const value = (flag: string): string => {
     const v = argv[++i];
@@ -174,6 +200,13 @@ export function parseScanArgs(argv: string[]): ScanArgs {
         break;
       case "--detector":
         out.detectorPlugins.push(value(a));
+        break;
+      // Resolved in the pre-scan above; consume the tokens so they are not
+      // mistaken for the server command.
+      case "--config":
+        value(a);
+        break;
+      case "--no-auto-config":
         break;
       default:
         if (a.startsWith("-")) {
@@ -695,6 +728,7 @@ export async function runScan(argv: string[]): Promise<number> {
   }
 
   const logger = new Logger({ verbose: args.verbose, logFile: args.logFile });
+  if (args.configNotice) logger.info(args.configNotice);
   const findings = new ArrayFindingsSink();
   const scope = buildScanScope(args);
 

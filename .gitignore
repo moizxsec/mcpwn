@@ -12,3 +12,6 @@ mcpwn-session*.jsonl
 
 # npm auth (local only)
 .npmrc
+
+# Local Claude Code worktrees / agent state
+.claude/

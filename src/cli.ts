@@ -49,6 +49,7 @@ import { runInit } from "./init.js";
 import { runCompletions } from "./completions.js";
 import { runBadge } from "./badge.js";
 import { runMan } from "./manpage.js";
+import { runEval } from "./eval.js"; // Phase 11: agent-susceptibility eval harness
 
 const HELP = `mcpwn — intercept & tamper proxy for MCP traffic
 
@@ -62,6 +63,7 @@ USAGE
   mcpwn pin capture [--out mcpwn.lock] [options] -- <command> [args...]
   mcpwn replay <session.jsonl> [options] -- <command> [args...]
   mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
+  mcpwn eval [--agent mock|command] [--agent-cmd <cmd>] [--scenario <id>]...
   mcpwn diff <golden.jsonl> [options] -- <command> [args...]   |   diff ... --http <url>
   mcpwn conformance [options] -- <command> [args...]   |   conformance --http <url>
   mcpwn report <session.jsonl> [--findings <dir>] -o report.html
@@ -191,6 +193,20 @@ SUBCOMMANDS
                                     findings. Flags: --json <file>, --findings-out
                                     <dir>, --timeout <ms>, -v. Exits nonzero on any
                                     FAIL.
+  eval [options]                    Agent-susceptibility eval: drive a TARGET
+                                    AGENT through the DVMCP vuln suite and score
+                                    (deterministically, from observed actions)
+                                    whether it took the bait. Agent is pluggable:
+                                    --agent mock (default; naive follower, no API
+                                    key, no network) or --agent command with
+                                    --agent-cmd "<cmd>" (JSON task spec on stdin,
+                                    JSON action on stdout — mcpwn never reads keys).
+                                    Flags: --mock follow|resist, --scenario <id>
+                                    (repeatable), --out <file> (JSON scorecard),
+                                    --fail-on-any, --fail-on <sev> (default high),
+                                    --timeout <ms>, --budget <ms>, --max-steps <n>,
+                                    -v. Exits nonzero when the agent falls for a
+                                    scenario at/above the threshold (CI).
   report <session.jsonl> [--findings <dir>] -o report.html
                                     Render a recorded session (+ optional
                                     findings dir) into a SINGLE self-contained,
@@ -1078,6 +1094,7 @@ async function main() {
   if (argv[0] === "templates") process.exit(runTemplates(argv.slice(1)));
   if (argv[0] === "replay") process.exit(await runReplay(argv.slice(1)));
   if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
+  if (argv[0] === "eval") process.exit(await runEval(argv.slice(1))); // Phase 11
   if (argv[0] === "diff") process.exit(await runDiff(argv.slice(1)));
   if (argv[0] === "conformance") process.exit(await runConformance(argv.slice(1)));
   if (argv[0] === "report") process.exit(await runReport(argv.slice(1)));

@@ -140,6 +140,8 @@ Passive detectors run **read-only** alongside the proxy — they never change wh
 | `--findings-out <dir>` | On exit, write `findings.json` + `findings.md` + `findings.sarif` (also enables the passive secret/poisoning linters). |
 | `--baseline <file>` | Diff each `tools/list` against a captured baseline — **rug-pull detection** (tool set / schema / description drift mid-session). |
 | `--baseline-capture <file>` | Capture the first `tools/list` to `<file>` inline while proxying. |
+| `--pin <file>` | Diff the live tool/resource/prompt surface against a committed `mcpwn.lock` — **cross-session rug-pull pinning**; any silent drift is a **HIGH** finding. Capture with `mcpwn pin capture`. |
+| `--taint` | **Provenance tainting** — flag the injection→action kill chain: untrusted server output (a tool result / resource) that is later reused inside a `tools/call` argument (**HIGH**). Read-only, opt-in. |
 | `--redact` | Mask built-in secret patterns (API keys, tokens, …) in the stderr log + JSONL. |
 | `--redact-file <file>` | Add redaction patterns, one `label=regex` per line. |
 
@@ -154,6 +156,27 @@ Narrow what mcpwn acts on; **out-of-scope traffic is always forwarded untouched*
 | `--scope-direction c2s\|s2c` | Only this direction. |
 | `--only-tampered` | Only show messages a rule actually changed. |
 | `--scope-affects-log` | Also omit out-of-scope traffic from the `--log` JSONL. |
+
+## Guard mode & blue-team defences
+
+mcpwn is an offensive tool by default, but the same message plumbing runs the other way too. Point it **defensively** and it becomes a protective firewall on the agent↔server channel. These three features are read-only or fail-open — they make traffic safer or leave it unchanged, never deadlocking the stream.
+
+- **Guard mode (`--guard` / `--policy <file>`)** — the defensive inverse of the tamper proxy. For every parseable message mcpwn recognises the same content classes the passive detectors flag (prompt-injection phrasing, leaked secrets, exfil URLs, invisible-unicode smuggling) and, per an active JSON **policy** (`mcpwn.policy.json`), decides to `allow`, `warn`, **`sanitize`** (strip only the offending span and forward) or **`block`** (drop the message) **before the agent ever sees it**. Guard mode is the one place mcpwn may drop a message — and it **fails open**: a buggy policy or pathological payload forwards the original untouched. With no policy it ships a built-in default that *sanitises* the four high-severity classes (least-disruptive: the agent keeps working, only the malicious span is removed). Precedence: `--policy <file>` > `./mcpwn.policy.json` > built-in default.
+- **Rug-pull pinning (`pin capture` + `--pin <file>`)** — the cross-session cousin of `--baseline`. `mcpwn pin capture` hashes a server's **whole advertised surface** — tools *and* resources *and* prompts — into a committed `mcpwn.lock`; `--pin` then diffs later runs against it and raises a **HIGH** finding on any silent description/schema/metadata change, or any added/removed item. Because the lock lives on disk, the pin and the check can be weeks and many processes apart — it catches a server that re-poisons long after the user approved it. Commit `mcpwn.lock` to your repo and gate CI on it.
+- **Provenance tainting (`--taint`)** — makes the indirect-injection **kill chain** explicit. It tags text originating from an untrusted server→client tool result / resource as *untrusted-external*, then raises a **HIGH** finding when that same text later reappears inside a client→server `tools/call` argument (source message id → sink call). It is read-only, keeps its own pipeline-owned state (no module globals, the Phase-6 correlator is untouched), and stays cheap via a bounded, minimum-length substring index.
+
+```bash
+# Run as a firewall (built-in default policy: sanitise injection/secrets/exfil/unicode)
+mcpwn --guard -- node ./my-server.js
+mcpwn --policy mcpwn.policy.json -- node ./my-server.js   # custom block/sanitise rules
+
+# Commit a lock, then fail later if the advertised surface drifts (cross-session)
+mcpwn pin capture --out mcpwn.lock -- node ./my-server.js
+mcpwn --pin mcpwn.lock --taint --findings-out ./out -- node ./my-server.js
+
+# Pin + taint also work under the self-driving scanner (CI)
+mcpwn scan --pin mcpwn.lock --findings-out ./out -- node ./my-server.js
+```
 
 ## Subcommands & transports
 
@@ -182,6 +205,7 @@ mcpwn payloads show path-traversal
 | --- | --- |
 | `mcpwn http --listen … --upstream …` | Streamable HTTP + SSE reverse proxy. Interactive mode disabled. |
 | `mcpwn baseline capture [--out <file>] -- <cmd>` | Record the first `tools/list` to a baseline file. |
+| `mcpwn pin capture [--out mcpwn.lock] -- <cmd>` | Hash the whole advertised surface (tools + resources + prompts) into a cross-session lockfile for `--pin`. |
 | `mcpwn replay <session.jsonl> -- <cmd>` | Replay recorded `client->server` traffic through a fresh server. |
 | `mcpwn payloads list` / `show <name>` | List / print the bundled payload libraries. |
 

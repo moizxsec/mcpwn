@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moizxsec/mcpwn/schema/policy.schema.json",
+  "title": "mcpwn.policy.json",
+  "description": "Guard-mode firewall policy (§3.14). In guard mode (`mcpwn --guard`) mcpwn sanitises or blocks malicious agent-bound content per these rules before the agent sees it. Precedence: --policy <file> > ./mcpwn.policy.json > built-in default. Mirror of the hand-rolled validator in src/guard/policy.ts (mcpwn ships zero runtime deps and does not evaluate this schema at runtime).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rules"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "description": "Optional label echoed on startup." },
+    "defaultAction": {
+      "$ref": "#/$defs/action",
+      "description": "Action when no rule matches (default: allow / fail-open)."
+    },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "action": {
+      "type": "string",
+      "enum": ["allow", "warn", "sanitize", "block"]
+    },
+    "contentClass": {
+      "type": "string",
+      "enum": ["injection", "secret", "exfil-url", "invisible-unicode"]
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JSONPath (dotted/bracketed) into the message JSON."
+        },
+        "exists": { "type": "boolean" },
+        "equals": {},
+        "contains": { "type": "string" },
+        "matches": { "type": "string", "description": "A regular expression." }
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "All present fields must match; an absent field is a wildcard.",
+      "properties": {
+        "direction": { "type": "string", "enum": ["client->server", "server->client"] },
+        "method": {
+          "type": "string",
+          "description": "Shell-style glob over the resolved JSON-RPC method."
+        },
+        "tool": {
+          "type": "string",
+          "description": "Shell-style glob over the tool name (params.name)."
+        },
+        "contentClass": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/contentClass" },
+          "description": "Any-of: matches when ANY listed class is present."
+        },
+        "jsonpath": { "$ref": "#/$defs/predicate" }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "action"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "match": { "$ref": "#/$defs/match" },
+        "action": { "$ref": "#/$defs/action" },
+        "reason": { "type": "string", "description": "Reason code surfaced in the finding + log." }
+      }
+    }
+  }
+}

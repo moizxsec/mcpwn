@@ -15,7 +15,7 @@ function resolvedMethod(flow: FlowMessage): string | undefined {
 
 /** One unit of agent-bound text pulled out of a server->client message, tagged
  *  with where it came from so a finding can point back at it. */
-interface TextSeg {
+export interface TextSeg {
   text: string;
   method: string;
   where: string;
@@ -47,7 +47,7 @@ function contentTexts(content: any, out: TextSeg[], method: string, where: strin
  * server-supplied sampling prompt. Detectors iterate this so a single scan
  * covers all protocol surfaces, not just tool descriptions. Read-only.
  */
-function agentBoundTexts(flow: FlowMessage): TextSeg[] {
+export function agentBoundTexts(flow: FlowMessage): TextSeg[] {
   if (flow.direction !== "server->client") return [];
   const method = resolvedMethod(flow);
   if (!method) return [];
@@ -148,8 +148,10 @@ export class SecretInResultDetector implements Detector {
   }
 }
 
-/** Phrases that read as instructions to the agent rather than documentation. */
-const INJECTION_PATTERNS: RegExp[] = [
+/** Phrases that read as instructions to the agent rather than documentation.
+ *  Exported so the guard (§3.14) can reuse the exact same signatures it both
+ *  detects and sanitizes against — detector and firewall never drift apart. */
+export const INJECTION_PATTERNS: RegExp[] = [
   /ignore\s+(?:all\s+|the\s+|your\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|prompts?|messages?)/i,
   /disregard\s+(?:all\s+|the\s+|your\s+)?(?:previous|prior|above|earlier)/i,
   /\bsystem\s+prompt\b/i,
@@ -160,7 +162,7 @@ const INJECTION_PATTERNS: RegExp[] = [
 ];
 
 /** Unicode directional-override / bidi controls used to hide text. */
-const RTL_CHARS = /[‪-‮⁦-⁩‎‏؜]/;
+export const RTL_CHARS = /[‪-‮⁦-⁩‎‏؜]/;
 
 /** `injection-marker-in-description`: imperative/override phrasing or bidi
  *  control chars in agent-bound text → tool-poisoning (high). Despite the name
@@ -197,9 +199,9 @@ export class InjectionMarkerInDescriptionDetector implements Detector {
  *  as an alternation (not one character class) so the zero-width joiner/
  *  non-joiner don't trip no-misleading-character-class; the Tag block stays a
  *  range. */
-const INVISIBLE_SRC =
+export const INVISIBLE_SRC =
   "\\u00AD|\\u180E|\\u200B|\\u200C|\\u200D|\\u2060|\\u2061|\\u2062|\\u2063|\\u2064|\\uFEFF|[\\u{E0000}-\\u{E007F}]";
-const INVISIBLE_RE = new RegExp(INVISIBLE_SRC, "u");
+export const INVISIBLE_RE = new RegExp(INVISIBLE_SRC, "u");
 
 /** Distinct hidden code points in `text`, rendered as U+XXXX, plus whether any
  *  are Unicode Tag characters (U+E0000–U+E007F), which have no legitimate use
@@ -264,7 +266,7 @@ const EXFIL_HOSTS: RegExp[] = [
 const URL_RE = /\bhttps?:\/\/([^/\s"'<>)\]}\\]+)/gi;
 
 /** Lowercased hostnames of every http(s) URL in `text` (userinfo/port stripped). */
-function extractHosts(text: string): string[] {
+export function extractHosts(text: string): string[] {
   const re = new RegExp(URL_RE.source, "gi");
   const hosts: string[] = [];
   let m: RegExpExecArray | null;
@@ -275,7 +277,7 @@ function extractHosts(text: string): string[] {
   return hosts;
 }
 
-function isExfilHost(host: string): boolean {
+export function isExfilHost(host: string): boolean {
   if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return true; // raw IPv4 literal
   return EXFIL_HOSTS.some((re) => re.test(host));
 }

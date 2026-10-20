@@ -8,6 +8,7 @@ import type { Logger, MessageLogExtra } from "../logger.js";
 import type { Detector } from "../detect/detector.js";
 import type { FindingsSink } from "../findings.js";
 import type { RuleActionRegistry } from "../plugins/index.js";
+import type { GuardEngine } from "../guard/guard.js";
 
 /**
  * Transport-agnostic processing options. A transport (stdio, and later HTTP)
@@ -38,6 +39,11 @@ export interface PipelineOptions {
   /** Custom tamper-action kinds registered via `--rule-plugin` (§3.11). Threaded
    *  into the rules engine so a rule may reference a plugin's `kind`. */
   ruleActionPlugins?: RuleActionRegistry;
+  /** Guard-mode firewall (§3.14, `--mode guard`). When set, in-scope messages
+   *  are evaluated against the policy and may be SANITISED or BLOCKED before
+   *  forwarding. Fail-open: a guard that throws forwards the original. Guard mode
+   *  is exclusive of tamper rules (the CLI leaves `rules` empty in guard mode). */
+  guard?: GuardEngine;
 }
 
 /** A compact end-of-session tally the proxy prints on exit (§3.6, mirrors the
@@ -180,6 +186,38 @@ export class MessagePipeline {
     if (!this.isCandidate(flow)) {
       this.log(flow, [], false, { forwarded: raw }, false);
       return { forward: raw, flow, applied: [], manualEdit: false };
+    }
+
+    // Guard mode (§3.14): the defensive firewall. Runs instead of tamper rules.
+    // Fail-open — any throw forwards the ORIGINAL message untouched, so the guard
+    // can never deadlock or silently blackhole the stream.
+    if (this.opts.guard) {
+      try {
+        const decision = this.opts.guard.evaluate(flow);
+        if (decision.action === "block") {
+          this.correlator.forget(parsed, direction);
+          this.stats.tampered++;
+          this.stats.dropped++;
+          this.log(flow, [`guard:block`], true, { forwarded: null }, true);
+          return { forward: null, flow, applied: [`guard:block`], manualEdit: false };
+        }
+        if (decision.action === "sanitize" && decision.sanitized !== undefined) {
+          const out = serialize(decision.sanitized);
+          this.stats.tampered++;
+          this.log(flow, [`guard:sanitize`], false, { forwarded: out }, true);
+          return { forward: out, flow, applied: [`guard:sanitize`], manualEdit: false };
+        }
+        // warn / allow: fall through to forward the original untouched.
+        const applied = decision.action === "warn" ? [`guard:warn`] : [];
+        this.log(flow, applied, false, { forwarded: raw }, true);
+        return { forward: raw, flow, applied, manualEdit: false };
+      } catch (err) {
+        this.opts.logger.error(
+          `guard threw (${(err as Error)?.message ?? err}); forwarding original`
+        );
+        this.log(flow, [], false, { forwarded: raw }, true);
+        return { forward: raw, flow, applied: [], manualEdit: false };
+      }
     }
 
     // 1) Headless rules run first (auto-tamper).

@@ -5,6 +5,8 @@ import { LineFramer } from "../engine/parser.js";
 import { MessagePipeline } from "./pipeline.js";
 import { inScope, type Scope } from "./scope.js";
 import { builtinLinters } from "../detect/linter.js";
+import { PinDetector, loadPin } from "../detect/pin.js";
+import { TaintDetector } from "../detect/taint.js";
 import { ArrayFindingsSink, writeFindingsDir, type Finding, type Severity } from "../findings.js";
 import { loadPayloads } from "../payloads/index.js";
 import { loadDetectorPlugin } from "../plugins/index.js";
@@ -91,6 +93,11 @@ export interface ScanArgs {
   scopeTools: string[];
   /** Custom passive detectors to load (`--detector <file.mjs>`, repeatable). */
   detectorPlugins: string[];
+  /** Rug-pull PIN lockfile (`--pin <file>`, §3.14/A3): diff the enumerated
+   *  tool/resource/prompt surface against a committed mcpwn.lock. */
+  pinFile?: string;
+  /** Provenance tainting (`--taint`, §3.14/A4). */
+  taint: boolean;
   /** One-line notice to log when a config file was loaded (§3.13). */
   configNotice?: string;
 }
@@ -110,6 +117,7 @@ export function parseScanArgs(argv: string[]): ScanArgs {
     scopeMethods: [],
     scopeTools: [],
     detectorPlugins: [],
+    taint: false,
   };
 
   // Config seeds the defaults BEFORE flag parsing, so CLI flags still override
@@ -200,6 +208,12 @@ export function parseScanArgs(argv: string[]): ScanArgs {
         break;
       case "--detector":
         out.detectorPlugins.push(value(a));
+        break;
+      case "--pin":
+        out.pinFile = value(a);
+        break;
+      case "--taint":
+        out.taint = true;
         break;
       // Resolved in the pre-scan above; consume the tokens so they are not
       // mistaken for the server command.
@@ -736,6 +750,17 @@ export async function runScan(argv: string[]): Promise<number> {
   // CODE (see plugins/index.ts) — only explicit --detector paths are loaded, and
   // each is announced on startup. The pipeline isolates every detector call.
   const detectors: Detector[] = builtinLinters();
+  // Opt-in detectors (§3.14): cross-session pin diff + provenance taint. Both are
+  // read-only and run alongside the built-ins; neither is in builtinLinters().
+  if (args.pinFile) {
+    try {
+      detectors.push(new PinDetector(loadPin(args.pinFile)));
+    } catch (err) {
+      logger.error(`could not load pin lock: ${(err as Error).message}`);
+      return 2;
+    }
+  }
+  if (args.taint) detectors.push(new TaintDetector());
   for (const p of args.detectorPlugins) {
     let d: Detector & { name: string };
     try {

@@ -18,6 +18,8 @@ import {
   loadBaseline,
   captureBaseline,
 } from "./detect/baseline.js";
+import { PinDetector, loadPin, capturePin } from "./detect/pin.js";
+import { TaintDetector } from "./detect/taint.js";
 import type { Detector } from "./detect/detector.js";
 import {
   loadDetectorPlugin,
@@ -37,6 +39,8 @@ import {
 } from "./config.js";
 import type { Scope } from "./core/scope.js";
 import type { Direction, Rule } from "./types.js";
+import { GuardEngine } from "./guard/guard.js";
+import { loadPolicy, defaultPolicy, findDefaultPolicy, PolicyError } from "./guard/policy.js";
 
 const HELP = `mcpwn — intercept & tamper proxy for MCP traffic
 
@@ -47,6 +51,7 @@ USAGE
   mcpwn [options] -- <command> [args...]
   mcpwn http --listen host:port --upstream <url> [options]
   mcpwn baseline capture [--out <file>] [options] -- <command> [args...]
+  mcpwn pin capture [--out mcpwn.lock] [options] -- <command> [args...]
   mcpwn replay <session.jsonl> [options] -- <command> [args...]
   mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
   mcpwn report <session.jsonl> [--findings <dir>] -o report.html
@@ -89,8 +94,25 @@ DETECTION & REPORTING (§3.4, §3.5, §3.9)
       --baseline <file>      Diff each tools/list against a captured baseline
                              (rug-pull detection).
       --baseline-capture <file>  Capture the first tools/list to <file> inline.
+      --pin <file>           Diff the live tool/resource/prompt surface against a
+                             committed mcpwn.lock (cross-session rug-pull pinning);
+                             any silent drift is a HIGH finding. See "pin capture".
+      --taint                Flag the injection->action kill chain: untrusted
+                             server output (tool result / resource) that is later
+                             reused inside a client->server tools/call argument
+                             (HIGH). Read-only; opt-in.
       --redact               Mask built-in secret patterns in stderr + JSONL.
       --redact-file <file>   Add redaction patterns (label=regex per line).
+
+GUARD / BLUE-TEAM (§3.14 — the defensive inverse of the tamper proxy)
+      --guard                Run as a protective FIREWALL: sanitise/block
+                             injection, secrets, exfil URLs and invisible-unicode
+                             in agent-bound content before the agent sees it.
+                             (This is the one mode where mcpwn may drop a message;
+                             it fails OPEN — a guard error forwards the original.)
+      --policy <file>        Guard policy (mcpwn.policy.json). Implies --guard.
+                             Defaults to ./mcpwn.policy.json, else a built-in
+                             policy that sanitises the high-severity classes.
 
 SCOPING (§3.6 — out-of-scope traffic is forwarded untouched + hidden)
       --scope-method <glob>   Only methods matching this glob (repeatable).
@@ -107,6 +129,11 @@ SUBCOMMANDS
   baseline capture [--out <file>] -- <cmd>
                                     Record the first tools/list to a baseline
                                     file (default: baseline.json).
+  pin capture [--out mcpwn.lock] -- <cmd>
+                                    Hash the WHOLE advertised surface (tools +
+                                    resources + prompts) into a committed lockfile
+                                    (default: mcpwn.lock). Diff later runs with
+                                    --pin to catch cross-session rug pulls.
   replay <session.jsonl> -- <cmd>   Replay recorded client->server traffic
                                     through a fresh server (rules apply).
                                     Flags: -r, -l, -v, --only-method, --repeat <n>
@@ -121,8 +148,8 @@ SUBCOMMANDS
                                     --timeout <ms>, --budget <ms>, --fuzz-max <n>,
                                     --sample-max <n>, --scope-method <glob>,
                                     --scope-tool <name>, --detector <file.mjs>,
-                                    -l <file>, -v. Exits nonzero when a finding
-                                    meets --fail-on (CI).
+                                    --pin <file>, --taint, -l <file>, -v. Exits
+                                    nonzero when a finding meets --fail-on (CI).
   report <session.jsonl> [--findings <dir>] -o report.html
                                     Render a recorded session (+ optional
                                     findings dir) into a SINGLE self-contained,
@@ -149,6 +176,10 @@ EXAMPLES
   # Rug-pull detection: capture once, then watch for tool-definition drift
   mcpwn baseline capture --out base.json -- node ./my-server.js
   mcpwn --baseline base.json --findings-out ./out -- node ./my-server.js
+
+  # Cross-session pinning: commit mcpwn.lock, fail later if the surface drifts
+  mcpwn pin capture --out mcpwn.lock -- node ./my-server.js
+  mcpwn --pin mcpwn.lock --taint --findings-out ./out -- node ./my-server.js
 
   # Self-driving scan: point it at a server, fuzz it, fail CI on high findings
   mcpwn scan --fuzz --findings-out ./out -- node ./my-server.js
@@ -190,12 +221,24 @@ export interface SharedArgs {
   findingsOut?: string;
   baselineFile?: string;
   baselineCapture?: string;
+  /** Rug-pull PIN lockfile (`--pin <file>`, §3.14/A3): diff the live tool/
+   *  resource/prompt surface against a committed `mcpwn.lock`. */
+  pinFile?: string;
+  /** Provenance tainting (`--taint`, §3.14/A4): flag untrusted server output
+   *  that is later reused inside a tools/call argument (injection→action chain). */
+  taint: boolean;
   redact: boolean;
   redactFile?: string;
   /** Custom passive detectors to load (`--detector <file.mjs>`, repeatable). */
   detectorPlugins: string[];
   /** Custom tamper-action plugins to load (`--rule-plugin <file.mjs>`, repeatable). */
   ruleActionPlugins: string[];
+  /** Guard mode (`--guard`, §3.14): run as a defensive firewall instead of a
+   *  tamper proxy — in-scope messages are sanitised/blocked per the policy. */
+  guard: boolean;
+  /** Policy file for guard mode (`--policy <file>`); when absent and guard is on,
+   *  `./mcpwn.policy.json` is auto-loaded, else the baked-in default policy. */
+  policyFile?: string;
 }
 
 export interface ParsedArgs extends SharedArgs {
@@ -217,9 +260,11 @@ function emptyShared(): SharedArgs {
     scopeTools: [],
     onlyTampered: false,
     scopeAffectsLog: false,
+    taint: false,
     redact: false,
     detectorPlugins: [],
     ruleActionPlugins: [],
+    guard: false,
   };
 }
 
@@ -249,6 +294,13 @@ function parseSharedFlag(a: string, argv: string[], i: number, out: SharedArgs):
     case "--rule-plugin":
       out.ruleActionPlugins.push(need("a <file.mjs> argument"));
       return i;
+    case "--guard":
+      out.guard = true;
+      return i;
+    case "--policy":
+      out.policyFile = need("a <file> argument");
+      out.guard = true; // supplying a policy implies guard mode
+      return i;
     case "-l":
     case "--log":
       out.logFile = need("a <file> argument");
@@ -261,6 +313,12 @@ function parseSharedFlag(a: string, argv: string[], i: number, out: SharedArgs):
       return i;
     case "--baseline-capture":
       out.baselineCapture = need("a <file> argument");
+      return i;
+    case "--pin":
+      out.pinFile = need("a <file> argument");
+      return i;
+    case "--taint":
+      out.taint = true;
       return i;
     case "--redact":
       out.redact = true;
@@ -628,6 +686,61 @@ async function runBaseline(argv: string[]): Promise<number> {
   return captureBaseline(command, commandArgs, out, logger);
 }
 
+/** `mcpwn pin capture [--out <file>] [-v] -- <command> [args...]` (§3.14/A3) —
+ *  the cross-session rug-pull lock. Mirrors `baseline capture`, but snapshots the
+ *  WHOLE advertised surface (tools + resources + prompts) into a committed
+ *  `mcpwn.lock` that `--pin <file>` later diffs against. */
+async function runPin(argv: string[]): Promise<number> {
+  const sub = argv[0];
+  if (sub !== "capture") {
+    process.stderr.write(`mcpwn pin: unknown subcommand "${sub ?? ""}" (use "capture")\n`);
+    return 2;
+  }
+  let out = "mcpwn.lock";
+  let verbose = false;
+  let command: string | undefined;
+  let commandArgs: string[] = [];
+  const rest = argv.slice(1);
+  let i = 0;
+  for (; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === "--") {
+      i++;
+      break;
+    }
+    if (a === "--out" || a === "-o") {
+      const val = rest[++i];
+      if (val === undefined) {
+        process.stderr.write("mcpwn pin: option --out requires a <file>\n");
+        return 2;
+      }
+      out = val;
+      continue;
+    }
+    if (a === "-v" || a === "--verbose") {
+      verbose = true;
+      continue;
+    }
+    if (a.startsWith("-")) {
+      process.stderr.write(`mcpwn pin: unknown option "${a}"\n`);
+      return 2;
+    }
+    command = a;
+    commandArgs = rest.slice(i + 1);
+    break;
+  }
+  if (command === undefined) {
+    command = rest[i];
+    commandArgs = rest.slice(i + 1);
+  }
+  if (!command) {
+    process.stderr.write("mcpwn pin capture: missing server command (after --)\n");
+    return 2;
+  }
+  const logger = new Logger({ verbose });
+  return capturePin(command, commandArgs, out, logger);
+}
+
 /** Resolve redaction patterns (built-in + file), or undefined when disabled. */
 function resolveRedact(redact: boolean, redactFile?: string): RedactPattern[] | undefined {
   if (!redact && !redactFile) return undefined;
@@ -651,12 +764,17 @@ function buildDetection(
   pluginDetectors: Detector[] = []
 ): DetectionLayer {
   const detectors: Detector[] = [];
-  const needSink = !!a.findingsOut || !!a.baselineFile || pluginDetectors.length > 0;
+  const needSink =
+    !!a.findingsOut || !!a.baselineFile || !!a.pinFile || a.taint || pluginDetectors.length > 0;
   const findings = needSink ? new ArrayFindingsSink() : undefined;
 
   if (a.findingsOut) detectors.push(...builtinLinters());
   if (a.baselineFile) detectors.push(new BaselineDetector(loadBaseline(a.baselineFile)));
   if (a.baselineCapture) detectors.push(new BaselineCaptureDetector(a.baselineCapture, logger));
+  // Rug-pull pinning (§3.14/A3) + provenance tainting (§3.14/A4): opt-in detectors,
+  // like --baseline. Neither is in builtinLinters(); both are read-only.
+  if (a.pinFile) detectors.push(new PinDetector(loadPin(a.pinFile)));
+  if (a.taint) detectors.push(new TaintDetector());
   // Custom detectors (§3.11) run alongside the built-ins; the pipeline wraps each
   // in the same read-only try/catch, so a throwing plugin can't block the wire.
   detectors.push(...pluginDetectors);
@@ -762,6 +880,39 @@ async function loadPlugins(a: SharedArgs, logger: Logger): Promise<LoadedPlugins
   return { detectors, actionRegistry: buildActionRegistry(actions) };
 }
 
+/** Build the guard-mode firewall when `--guard`/`--policy` is set, else undefined.
+ *  Policy precedence: --policy <file> > ./mcpwn.policy.json (auto) > baked-in
+ *  default. Throws nothing fatal here; a bad explicit policy file surfaces as a
+ *  ConfigError-style message handled by the caller. */
+function buildGuard(a: SharedArgs, logger: Logger, sink?: FindingsSink): GuardEngine | undefined {
+  if (!a.guard) return undefined;
+  let policy;
+  let src: string;
+  try {
+    if (a.policyFile) {
+      policy = loadPolicy(a.policyFile);
+      src = a.policyFile;
+    } else {
+      const auto = findDefaultPolicy();
+      if (auto) {
+        policy = loadPolicy(auto);
+        src = auto;
+      } else {
+        policy = defaultPolicy();
+        src = "built-in default policy";
+      }
+    }
+  } catch (err) {
+    if (err instanceof PolicyError) throw err;
+    throw new PolicyError((err as Error).message);
+  }
+  logger.info(
+    `guard mode ON — firewall policy: ${policy.name ?? "(unnamed)"} [${src}]; ` +
+      `${policy.rules.length} rule(s). Malicious content will be sanitised/blocked before the agent sees it.`
+  );
+  return new GuardEngine(policy, sink);
+}
+
 async function runHttp(argv: string[]): Promise<number> {
   let configNotice: string | undefined;
   let seed: SharedArgs | undefined;
@@ -812,14 +963,25 @@ async function runHttp(argv: string[]): Promise<number> {
   }
   if (detection.findings) process.on("exit", detection.writeOnExit);
 
+  const guardSink: FindingsSink | undefined =
+    detection.findings ?? (parsed.guard ? new ArrayFindingsSink() : undefined);
+  let guard: GuardEngine | undefined;
+  try {
+    guard = buildGuard(parsed, logger, guardSink);
+  } catch (err) {
+    logger.error((err as Error).message);
+    return 2;
+  }
+
   const pipeline = new MessagePipeline({
     rules,
     logger,
     scope: buildScope(parsed),
     scopeAffectsLog: parsed.scopeAffectsLog,
     detectors: detection.detectors,
-    findings: detection.findings,
+    findings: guardSink,
     ruleActionPlugins: plugins.actionRegistry,
+    guard,
     holdTimeoutMs: 0, // interactive disabled for HTTP; plumbed for completeness
   });
 
@@ -846,6 +1008,7 @@ async function main() {
   if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
   if (argv[0] === "report") process.exit(await runReport(argv.slice(1)));
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));
+  if (argv[0] === "pin") process.exit(await runPin(argv.slice(1)));
   if (argv[0] === "http") process.exit(await runHttp(argv.slice(1)));
 
   const cfg = resolveConfig(argv, (msg) => {
@@ -906,6 +1069,18 @@ async function main() {
 
   const intercept = parsed.intercept ? new InterceptController(true) : undefined;
 
+  // Guard-mode firewall (§3.14). When on, guard findings need somewhere to land
+  // for the exit summary even if --findings-out was not set.
+  const summarySink: FindingsSink | undefined =
+    detection.findings ?? (parsed.guard ? new ArrayFindingsSink() : undefined);
+  let guard: GuardEngine | undefined;
+  try {
+    guard = buildGuard(parsed, logger, summarySink);
+  } catch (err) {
+    logger.error((err as Error).message);
+    process.exit(2);
+  }
+
   const pipeline = new MessagePipeline({
     rules,
     logger,
@@ -913,15 +1088,16 @@ async function main() {
     scope: buildScope(parsed),
     scopeAffectsLog: parsed.scopeAffectsLog,
     detectors: detection.detectors,
-    findings: detection.findings,
+    findings: summarySink,
     ruleActionPlugins: plugins.actionRegistry,
+    guard,
   });
 
   // Compact end-of-session tally on exit (stderr only — the MCP stdout channel
   // is never touched). Registered after the findings writer so findings are
   // flushed to disk before the summary counts them.
   process.on("exit", () => {
-    logger.sessionSummary(pipeline.summary(), detection.findings?.all() ?? []);
+    logger.sessionSummary(pipeline.summary(), summarySink?.all() ?? []);
   });
   const transport = new StdioTransport({
     command: parsed.command,

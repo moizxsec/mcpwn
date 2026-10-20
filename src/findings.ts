@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Direction } from "./types.js";
+import { advisoryFor } from "./advisory.js";
 
 /**
  * Findings model + writers (§3.5). Detectors (§3.4, §3.9) record observations
@@ -185,12 +186,27 @@ export function writeSarif(findings: Finding[]): string {
   for (const f of findings) {
     if (ruleIndex.has(f.id)) continue;
     ruleIndex.set(f.id, rules.length);
-    rules.push({
+    const rule: Record<string, unknown> = {
       id: f.id,
       name: f.id,
       shortDescription: { text: f.title },
       defaultConfiguration: { level: sarifLevel(f.severity) },
-    });
+    };
+    // Additive CWE/CVSS metadata (§Phase-9 C2). `security-severity` + the
+    // `external/cwe/...` tag are the GitHub code-scanning conventions, so the
+    // CWE and CVSS score surface in the Security tab. Omitted for an unmapped id.
+    const a = advisoryFor(f.id);
+    if (a) {
+      rule.properties = {
+        "security-severity": a.cvssScore.toFixed(1),
+        cwe: a.cwe,
+        cvssScore: a.cvssScore,
+        cvssVector: a.cvssVector,
+        attackClass: a.attackClass,
+        tags: ["security", `external/cwe/${a.cwe.toLowerCase()}`],
+      };
+    }
+    rules.push(rule);
   }
 
   const results = findings.map((f) => {

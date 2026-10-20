@@ -196,6 +196,19 @@ test("CRITICAL: all attacker content is HTML-escaped — no script execution vec
   assert.match(html, /\\u003c\/script/);
 });
 
+test("finding cards show additive CWE + CVSS for mapped ids (no URLs)", () => {
+  const html = render();
+  // tool-poisoning (CWE-1427) + secret-exposure (CWE-200) are in the fixture.
+  assert.match(html, /<dt>CWE<\/dt>/);
+  assert.match(html, /<dt>CVSS<\/dt>/);
+  assert.match(html, /CWE-1427/);
+  assert.match(html, /CWE-200/);
+  assert.match(html, /CVSS:3\.1\//);
+  // The enrichment must not smuggle a reference URL into the self-contained page
+  // (covered more strictly by the "no external URL" test below).
+  assert.ok(!/https?:\/\//.test(html), "CWE/CVSS enrichment adds no URL");
+});
+
 test("self-contained: references no external URL / CDN / font", () => {
   const html = render();
   assert.ok(!/https?:\/\//.test(html), "no absolute http(s) URL anywhere");

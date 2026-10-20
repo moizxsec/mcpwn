@@ -105,6 +105,23 @@ test("Markdown includes title, severity and evidence", () => {
   assert.match(md, /### Evidence/);
 });
 
+test("SARIF rules carry additive CWE/CVSS metadata (code-scanning conventions)", () => {
+  const sarif = JSON.parse(writeSarif(sample));
+  const rules = sarif.runs[0].tool.driver.rules;
+  const byId = Object.fromEntries(rules.map((r) => [r.id, r]));
+
+  // secret-exposure is a mapped id -> CWE-200 + CVSS properties present.
+  const sec = byId["secret-exposure"].properties;
+  assert.ok(sec, "mapped rule carries properties");
+  assert.equal(sec.cwe, "CWE-200");
+  assert.match(sec["security-severity"], /^\d+\.\d$/, "GitHub security-severity is a numeric string");
+  assert.match(sec.cvssVector, /^CVSS:3\.1\//);
+  assert.ok(sec.tags.includes("external/cwe/cwe-200"), "carries the external/cwe tag");
+
+  // tool-poisoning -> CWE-1427.
+  assert.equal(byId["tool-poisoning"].properties.cwe, "CWE-1427");
+});
+
 test("empty findings still produce valid outputs", () => {
   assert.deepEqual(JSON.parse(writeJson([])), []);
   assert.match(writeMarkdown([]), /No findings recorded/);

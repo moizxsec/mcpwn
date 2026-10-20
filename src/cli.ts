@@ -10,6 +10,7 @@ import { loadPayloads, listPayloads } from "./payloads/index.js";
 import { runReplay } from "./replay.js";
 import { runScan } from "./core/scan.js";
 import { runReport } from "./report.js";
+import { runAdvisory } from "./advisory.js";
 import { ArrayFindingsSink, writeFindingsDir, type FindingsSink } from "./findings.js";
 import { builtinLinters } from "./detect/linter.js";
 import {
@@ -60,6 +61,7 @@ USAGE
   mcpwn replay <session.jsonl> [options] -- <command> [args...]
   mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
   mcpwn report <session.jsonl> [--findings <dir>] -o report.html
+  mcpwn advisory <findings-dir|findings.json> [-o <dir|file.md>]
   mcpwn payloads list | show <name>
   mcpwn templates list | show <id> | lint [dir]
   mcpwn wrap --client <claude-desktop|cursor|cline|vscode|windsurf> [--dry-run]
@@ -167,6 +169,12 @@ SUBCOMMANDS
                                     findings by severity, session timeline, and
                                     side-by-side tamper diffs. A static file — no
                                     live server. Omit -o to write to stdout.
+  advisory <findings-dir|findings.json> [-o <dir|file.md>] [--session <jsonl>]
+                                    Turn findings into filled CVSS v3.1 + CWE
+                                    advisories (mirroring docs/ADVISORY_TEMPLATE.md).
+                                    -o <dir> writes one .md per finding; -o
+                                    <file.md> writes one combined document; omit
+                                    -o to print the combined doc to stdout.
   payloads list                     List bundled payload libraries.
   payloads show <name>              Print a payload library (one per line).
   templates list                    List bundled community templates (rule-packs)
@@ -1035,6 +1043,7 @@ async function main() {
   if (argv[0] === "replay") process.exit(await runReplay(argv.slice(1)));
   if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
   if (argv[0] === "report") process.exit(await runReport(argv.slice(1)));
+  if (argv[0] === "advisory") process.exit(await runAdvisory(argv.slice(1)));
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));
   if (argv[0] === "pin") process.exit(await runPin(argv.slice(1)));
   if (argv[0] === "http") process.exit(await runHttp(argv.slice(1)));

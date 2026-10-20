@@ -15,6 +15,7 @@ export const SUBCOMMANDS = [
   "replay",
   "scan",
   "report",
+  "advisory",
   "payloads",
   "templates",
   "wrap",

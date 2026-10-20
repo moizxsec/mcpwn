@@ -2,6 +2,7 @@ import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { bySeverity, type Finding, type Severity } from "./findings.js";
+import { advisoryFor } from "./advisory.js";
 import type { Direction } from "./types.js";
 
 /**
@@ -309,6 +310,19 @@ function renderFindings(findings: Finding[]): string {
       const meta: string[] = [];
       meta.push(`<div><dt>ID</dt><dd class="mono">${escapeHtml(f.id)}</dd></div>`);
       meta.push(`<div><dt>Severity</dt><dd>${escapeHtml(f.severity)}</dd></div>`);
+      // Additive CWE/CVSS (§Phase-9 C2), from the canonical mapping. Text only —
+      // no reference URLs — so the report stays fully self-contained (no http(s)).
+      const adv = advisoryFor(f.id);
+      if (adv) {
+        meta.push(
+          `<div><dt>CWE</dt><dd class="mono">${escapeHtml(`${adv.cwe} (${adv.cweName})`)}</dd></div>`
+        );
+        meta.push(
+          `<div><dt>CVSS</dt><dd class="mono">${escapeHtml(
+            `${adv.cvssScore} (${adv.cvssSeverity}) — ${adv.cvssVector}`
+          )}</dd></div>`
+        );
+      }
       if (f.direction)
         meta.push(`<div><dt>Direction</dt><dd>${escapeHtml(arrow(f.direction))}</dd></div>`);
       if (f.method)

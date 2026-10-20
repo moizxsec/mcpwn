@@ -256,6 +256,9 @@ mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
 # Render a recorded session (+ findings) into ONE self-contained HTML advisory
 mcpwn report session.jsonl --findings ./out -o report.html
 
+# Turn findings into filled CVSS v3.1 + CWE advisories (GHSA-style markdown)
+mcpwn advisory ./out -o ./advisories
+
 # Run a community template (rule-pack) against a server
 mcpwn templates list
 mcpwn --template tool-poisoning --findings-out ./out -- node ./my-server.js
@@ -265,6 +268,7 @@ mcpwn --template tool-poisoning --findings-out ./out -- node ./my-server.js
 | --- | --- |
 | `mcpwn scan` | Active, agent-free scanner over stdio or HTTP: paginated enumeration, content sampling, optional `--fuzz`, and a `--fail-on` CI gate. Emits JSON / Markdown / **SARIF** (with stable `partialFingerprints`, so code-scanning de-dupes across runs). |
 | `mcpwn report` | Turns a session log + findings dir into a single zero-dependency **HTML advisory** (header stats, findings by severity, side-by-side tamper diffs). A static file — no live server. |
+| `mcpwn advisory` | Turns a findings dir / `findings.json` into filled **CVSS v3.1 + CWE advisories** (GHSA-style markdown mirroring [docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md)) — one `.md` per finding, a combined doc, or stdout. CWE/CVSS also enrich the SARIF rule metadata and the HTML report. See [docs/THREATS.md](./docs/THREATS.md). |
 | `mcpwn templates` | Community rule-pack **gallery** (`list` / `show <id>` / `lint`); load one into any run with `--template <id>`. |
 | `examples/dvmcp` | **Damn-Vulnerable MCP** — one intentionally-broken server per attack class (path-traversal, SSRF, command-injection, tool-poisoning, rug-pull, sampling-abuse, …) plus a scoreboard. Run `npm run dvmcp`. |
 
@@ -450,13 +454,21 @@ tamper a batched server, split it upstream or open an issue.
 
 ## Hunting bugs
 
-[**docs/AUDITING.md**](./docs/AUDITING.md) is a playbook that maps each threat
-class to a concrete mcpwn workflow — path traversal, SSRF, command injection,
-indirect prompt injection, tool poisoning, rug pulls, and sampling abuse — plus
-the bundled payload libraries in [`payloads/`](./payloads) (list them with
-`mcpwn payloads list`, print one with `mcpwn payloads show <name>`). When you
-find something, use [docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md)
-and disclose responsibly.
+[**docs/THREATS.md**](./docs/THREATS.md) is the MCP threat taxonomy — a
+maintained catalogue of every attack class (indirect prompt injection, tool
+poisoning, tool shadowing, rug pull, sampling abuse, elicitation phishing,
+confused deputy, token passthrough, SSRF / path traversal / command injection,
+data exfiltration, invisible-unicode smuggling, injection→action chaining) with
+its CWE, the mcpwn detector / template / dvmcp server that covers it, and the
+fix. [**docs/AUDITING.md**](./docs/AUDITING.md) is the hands-on playbook that
+maps those classes to concrete mcpwn workflows — plus the bundled payload
+libraries in [`payloads/`](./payloads) (list them with `mcpwn payloads list`,
+print one with `mcpwn payloads show <name>`).
+
+When you find something, turn the findings into CVSS v3.1 + CWE advisories with
+`mcpwn advisory <findings-dir> -o <dir>`, use
+[docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md), and disclose
+responsibly.
 
 ## Contributing
 

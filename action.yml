@@ -1,0 +1,102 @@
+name: "mcpwn MCP security scan"
+description: >-
+  Scan an MCP server with mcpwn (self-driving, no agent in the loop), fail the
+  job on findings at/above a severity, and upload findings.sarif to the GitHub
+  Security tab (code scanning).
+author: "moizxsec"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  server-command:
+    description: >-
+      The stdio MCP server command to scan, e.g. "node ./my-server.js" or
+      "npx -y @scope/server". Mutually exclusive with http-url.
+    required: false
+    default: ""
+  http-url:
+    description: "A remote Streamable HTTP MCP server URL to scan instead of a stdio command."
+    required: false
+    default: ""
+  fail-on:
+    description: "Fail the job if any finding is at or above this severity (critical|high|medium|low|info)."
+    required: false
+    default: "high"
+  fuzz:
+    description: "Enable active tool fuzzing (true/false)."
+    required: false
+    default: "false"
+  findings-dir:
+    description: "Directory to write findings.json/md/sarif into."
+    required: false
+    default: "mcpwn-findings"
+  mcpwn-version:
+    description: "The @moizxsec/mcpwn version/tag to install (npm dist-tag or exact version)."
+    required: false
+    default: "latest"
+  upload-sarif:
+    description: "Upload findings.sarif via github/codeql-action/upload-sarif (true/false)."
+    required: false
+    default: "true"
+
+outputs:
+  sarif:
+    description: "Path to the generated SARIF file."
+    value: "${{ inputs.findings-dir }}/findings.sarif"
+  findings-dir:
+    description: "Directory containing findings.json/md/sarif."
+    value: "${{ inputs.findings-dir }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Install mcpwn
+      shell: bash
+      # Pass inputs through env (never interpolate ${{ }} directly into a run
+      # script) so a crafted input value can never break out into shell.
+      env:
+        MCPWN_VERSION: ${{ inputs.mcpwn-version }}
+      run: npm install -g "@moizxsec/mcpwn@${MCPWN_VERSION}"
+
+    - name: Run mcpwn scan
+      id: scan
+      shell: bash
+      env:
+        FINDINGS_DIR: ${{ inputs.findings-dir }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        FUZZ_ON: ${{ inputs.fuzz }}
+        HTTP_URL: ${{ inputs.http-url }}
+        SERVER_COMMAND: ${{ inputs.server-command }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$FINDINGS_DIR"
+        FUZZ=""
+        if [ "$FUZZ_ON" = "true" ]; then FUZZ="--fuzz"; fi
+        if [ -n "$HTTP_URL" ]; then
+          mcpwn scan $FUZZ --fail-on "$FAIL_ON" \
+            --findings-out "$FINDINGS_DIR" \
+            --http "$HTTP_URL"
+        elif [ -n "$SERVER_COMMAND" ]; then
+          # SERVER_COMMAND is a command by nature (set by the workflow author);
+          # word-splitting is intentional so "node ./srv.js --flag" works.
+          mcpwn scan $FUZZ --fail-on "$FAIL_ON" \
+            --findings-out "$FINDINGS_DIR" \
+            -- $SERVER_COMMAND
+        else
+          echo "::error::mcpwn action: provide either server-command or http-url"
+          exit 2
+        fi
+
+    # Upload even when the scan step failed the job on findings, so the alerts
+    # still land in the Security tab.
+    - name: Upload SARIF to the Security tab
+      if: ${{ always() && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: "${{ inputs.findings-dir }}/findings.sarif"

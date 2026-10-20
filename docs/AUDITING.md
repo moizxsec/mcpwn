@@ -3,6 +3,12 @@
 A practical playbook for finding real vulnerabilities in MCP servers using
 mcpwn. Each recipe maps a threat class to a concrete, repeatable workflow.
 
+> For the full catalogue of MCP attack classes — each with its CWE, the mcpwn
+> detector/template/[dvmcp](../examples/dvmcp/README.md) server that covers it,
+> and remediation — see the **[MCP threat taxonomy (docs/THREATS.md)](./THREATS.md)**.
+> Turn any findings dir into CVSS v3.1 + CWE advisories with
+> `mcpwn advisory <findings-dir> -o <dir>`.
+
 > **Authorized testing only.** Run servers you own or are explicitly allowed
 > to assess. The cleanest legal footing is to `npx`/run the open-source server
 > **locally on your own machine** — you own that execution — and disclose any

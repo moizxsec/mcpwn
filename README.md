@@ -7,8 +7,11 @@
   <img src="https://raw.githubusercontent.com/moizxsec/mcpwn/main/assets/demo.gif?v=0.2.0" alt="mcpwn tampers a tool result in flight; the agent obeys the injected instruction and exfiltrates a secret" width="760">
 </p>
 
+[![npm version](https://img.shields.io/npm/v/@moizxsec/mcpwn.svg)](https://www.npmjs.com/package/@moizxsec/mcpwn)
+[![npm downloads](https://img.shields.io/npm/dm/@moizxsec/mcpwn.svg)](https://www.npmjs.com/package/@moizxsec/mcpwn)
+[![CI](https://github.com/moizxsec/mcpwn/actions/workflows/ci.yml/badge.svg)](https://github.com/moizxsec/mcpwn/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A518-3c873a.svg)](https://nodejs.org)
+[![node](https://img.shields.io/node/v/@moizxsec/mcpwn.svg)](https://nodejs.org)
 
 > ⚠️ **Authorized testing only.** mcpwn is an offensive-security tool in the same category as Burp Suite and mitmproxy. Use it on agents and servers **you own or are explicitly authorized to assess**.
 
@@ -53,12 +56,22 @@ The demo runs a naive agent against a bundled vulnerable server, *through* mcpwn
 
 ```bash
 npm install -g @moizxsec/mcpwn      # then run:  mcpwn ...
-# or ad-hoc, no install:
+
+# or ad-hoc, zero install:
 npx @moizxsec/mcpwn -- npx -y @some/mcp-server
+
+# or Docker (stdin/stdout are the MCP channel, so run with -i and no -t):
+docker build -t mcpwn .
+docker run --rm -i mcpwn scan --http https://mcp.example.com/mcp
 ```
 
 The installed command is `mcpwn` (the package is published under a scope, but
 the binary name is unscoped). Requires Node ≥ 18. No other runtime dependencies.
+
+**Onboard in one step:** `mcpwn init` detects your installed MCP clients (Claude
+Desktop, Cursor, Cline, VS Code, Windsurf), offers to route one through mcpwn,
+and drops a starter `mcpwn.config.json` / `mcpwn.policy.json`. Shell completions:
+`mcpwn completions <bash|zsh|fish>`; a man page: `mcpwn man` (or `npm run man`).
 
 ## Usage
 
@@ -105,7 +118,28 @@ with no tty, it logs a notice and falls back to auto-forward (rules still apply)
 
 ### Wire it into your MCP client
 
-Wrap the command your client already runs:
+Let mcpwn edit the client's config for you — it finds the file (per-OS standard
+path), **backs it up**, and routes every configured stdio server through mcpwn:
+
+```bash
+mcpwn wrap --client claude-desktop            # or: cursor | cline | vscode | windsurf
+mcpwn wrap --client cursor --server weather --dry-run   # preview one entry, write nothing
+mcpwn unwrap --client claude-desktop          # restore the backup byte-for-byte
+```
+
+`wrap` is idempotent (a second run is a no-op), never clobbers without a
+`*.mcpwn.bak` backup, and `--dry-run` prints the diff. Use `--config-path <file>`
+for a non-standard install. Supported clients and their config paths:
+
+| Client | Config path (per OS) |
+| --- | --- |
+| `claude-desktop` | mac `~/Library/Application Support/Claude/claude_desktop_config.json` · linux `~/.config/Claude/…` · win `%APPDATA%\Claude\…` |
+| `cursor` | `~/.cursor/mcp.json` |
+| `cline` | `…/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
+| `vscode` | `…/Code/User/mcp.json` (uses the `servers` key) |
+| `windsurf` | `~/.codeium/windsurf/mcp_config.json` |
+
+Or do it by hand — the transform is just:
 
 ```jsonc
 // before
@@ -137,6 +171,8 @@ Passive detectors run **read-only** alongside the proxy — they never change wh
 | `--findings-out <dir>` | On exit, write `findings.json` + `findings.md` + `findings.sarif` (also enables the passive secret/poisoning linters). |
 | `--baseline <file>` | Diff each `tools/list` against a captured baseline — **rug-pull detection** (tool set / schema / description drift mid-session). |
 | `--baseline-capture <file>` | Capture the first `tools/list` to `<file>` inline while proxying. |
+| `--pin <file>` | Diff the live tool/resource/prompt surface against a committed `mcpwn.lock` — **cross-session rug-pull pinning**; any silent drift is a **HIGH** finding. Capture with `mcpwn pin capture`. |
+| `--taint` | **Provenance tainting** — flag the injection→action kill chain: untrusted server output (a tool result / resource) that is later reused inside a `tools/call` argument (**HIGH**). Read-only, opt-in. |
 | `--redact` | Mask built-in secret patterns (API keys, tokens, …) in the stderr log + JSONL. |
 | `--redact-file <file>` | Add redaction patterns, one `label=regex` per line. |
 
@@ -151,6 +187,27 @@ Narrow what mcpwn acts on; **out-of-scope traffic is always forwarded untouched*
 | `--scope-direction c2s\|s2c` | Only this direction. |
 | `--only-tampered` | Only show messages a rule actually changed. |
 | `--scope-affects-log` | Also omit out-of-scope traffic from the `--log` JSONL. |
+
+## Guard mode & blue-team defences
+
+mcpwn is an offensive tool by default, but the same message plumbing runs the other way too. Point it **defensively** and it becomes a protective firewall on the agent↔server channel. These three features are read-only or fail-open — they make traffic safer or leave it unchanged, never deadlocking the stream.
+
+- **Guard mode (`--guard` / `--policy <file>`)** — the defensive inverse of the tamper proxy. For every parseable message mcpwn recognises the same content classes the passive detectors flag (prompt-injection phrasing, leaked secrets, exfil URLs, invisible-unicode smuggling) and, per an active JSON **policy** (`mcpwn.policy.json`), decides to `allow`, `warn`, **`sanitize`** (strip only the offending span and forward) or **`block`** (drop the message) **before the agent ever sees it**. Guard mode is the one place mcpwn may drop a message — and it **fails open**: a buggy policy or pathological payload forwards the original untouched. With no policy it ships a built-in default that *sanitises* the four high-severity classes (least-disruptive: the agent keeps working, only the malicious span is removed). Precedence: `--policy <file>` > `./mcpwn.policy.json` > built-in default.
+- **Rug-pull pinning (`pin capture` + `--pin <file>`)** — the cross-session cousin of `--baseline`. `mcpwn pin capture` hashes a server's **whole advertised surface** — tools *and* resources *and* prompts — into a committed `mcpwn.lock`; `--pin` then diffs later runs against it and raises a **HIGH** finding on any silent description/schema/metadata change, or any added/removed item. Because the lock lives on disk, the pin and the check can be weeks and many processes apart — it catches a server that re-poisons long after the user approved it. Commit `mcpwn.lock` to your repo and gate CI on it.
+- **Provenance tainting (`--taint`)** — makes the indirect-injection **kill chain** explicit. It tags text originating from an untrusted server→client tool result / resource as *untrusted-external*, then raises a **HIGH** finding when that same text later reappears inside a client→server `tools/call` argument (source message id → sink call). It is read-only, keeps its own pipeline-owned state (no module globals, the Phase-6 correlator is untouched), and stays cheap via a bounded, minimum-length substring index.
+
+```bash
+# Run as a firewall (built-in default policy: sanitise injection/secrets/exfil/unicode)
+mcpwn --guard -- node ./my-server.js
+mcpwn --policy mcpwn.policy.json -- node ./my-server.js   # custom block/sanitise rules
+
+# Commit a lock, then fail later if the advertised surface drifts (cross-session)
+mcpwn pin capture --out mcpwn.lock -- node ./my-server.js
+mcpwn --pin mcpwn.lock --taint --findings-out ./out -- node ./my-server.js
+
+# Pin + taint also work under the self-driving scanner (CI)
+mcpwn scan --pin mcpwn.lock --findings-out ./out -- node ./my-server.js
+```
 
 ## Subcommands & transports
 
@@ -179,8 +236,106 @@ mcpwn payloads show path-traversal
 | --- | --- |
 | `mcpwn http --listen … --upstream …` | Streamable HTTP + SSE reverse proxy. Interactive mode disabled. |
 | `mcpwn baseline capture [--out <file>] -- <cmd>` | Record the first `tools/list` to a baseline file. |
+| `mcpwn pin capture [--out mcpwn.lock] -- <cmd>` | Hash the whole advertised surface (tools + resources + prompts) into a cross-session lockfile for `--pin`. |
 | `mcpwn replay <session.jsonl> -- <cmd>` | Replay recorded `client->server` traffic through a fresh server. |
 | `mcpwn payloads list` / `show <name>` | List / print the bundled payload libraries. |
+
+## Active scanning, reporting & templates
+
+Beyond the live proxy, mcpwn ships a self-driving scanner, a shareable report
+generator, a nuclei-style template gallery, and a bundled vulnerable-server
+suite — the pieces you reach for in CI and in a write-up.
+
+```bash
+# Self-driving active scan — NO agent in the loop. Drives the handshake,
+# enumerates every surface (tools/resources/prompts, paginated), samples
+# content, runs all passive detectors, and fails CI on findings.
+mcpwn scan --fuzz --findings-out ./out --fail-on high -- node ./my-server.js
+mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
+
+# Render a recorded session (+ findings) into ONE self-contained HTML advisory
+mcpwn report session.jsonl --findings ./out -o report.html
+
+# Turn findings into filled CVSS v3.1 + CWE advisories (GHSA-style markdown)
+mcpwn advisory ./out -o ./advisories
+
+# Run a community template (rule-pack) against a server
+mcpwn templates list
+mcpwn --template tool-poisoning --findings-out ./out -- node ./my-server.js
+```
+
+| Command | What it does |
+| --- | --- |
+| `mcpwn scan` | Active, agent-free scanner over stdio or HTTP: paginated enumeration, content sampling, optional `--fuzz`, and a `--fail-on` CI gate. Emits JSON / Markdown / **SARIF** (with stable `partialFingerprints`, so code-scanning de-dupes across runs). |
+| `mcpwn report` | Turns a session log + findings dir into a single zero-dependency **HTML advisory** (header stats, findings by severity, side-by-side tamper diffs). A static file — no live server. |
+| `mcpwn advisory` | Turns a findings dir / `findings.json` into filled **CVSS v3.1 + CWE advisories** (GHSA-style markdown mirroring [docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md)) — one `.md` per finding, a combined doc, or stdout. CWE/CVSS also enrich the SARIF rule metadata and the HTML report. See [docs/THREATS.md](./docs/THREATS.md). |
+| `mcpwn templates` | Community rule-pack **gallery** (`list` / `show <id>` / `lint`); load one into any run with `--template <id>`. |
+| `examples/dvmcp` | **Damn-Vulnerable MCP** — one intentionally-broken server per attack class (path-traversal, SSRF, command-injection, tool-poisoning, rug-pull, sampling-abuse, …) plus a scoreboard. Run `npm run dvmcp`. |
+
+Custom **detector** and **rule-action plugins** (`--detector` / `--rule-plugin`,
+both load local code you wrote or audited) extend the proxy and the scanner
+alike.
+
+### CI: GitHub Action & scan badge
+
+A reusable composite **GitHub Action** ([`action.yml`](./action.yml)) installs
+mcpwn, scans a server you name, fails the job on findings at/above a severity,
+and uploads `findings.sarif` to the **Security tab** (code scanning):
+
+```yaml
+# .github/workflows/mcpwn-scan.yml  (full example: examples/github-action/mcpwn-scan.yml)
+permissions:
+  contents: read
+  security-events: write          # required to upload SARIF
+jobs:
+  mcpwn:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moizxsec/mcpwn@main  # pin a release tag in practice
+        with:
+          server-command: "node ./my-server.js"   # or: http-url: https://…/mcp
+          fail-on: high
+          fuzz: "true"
+```
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `server-command` | — | stdio server command to scan (or use `http-url`). |
+| `http-url` | — | remote Streamable HTTP server to scan instead. |
+| `fail-on` | `high` | fail the job at/above this severity. |
+| `fuzz` | `false` | enable active tool fuzzing. |
+| `findings-dir` | `mcpwn-findings` | output dir (SARIF is uploaded from here). |
+| `mcpwn-version` | `latest` | npm dist-tag / version to install. |
+| `upload-sarif` | `true` | upload `findings.sarif` to the Security tab. |
+
+**Status badge** — emit a shields-style SVG a server author can embed, from a
+scan or a findings dir:
+
+```bash
+mcpwn scan --badge mcpwn.svg --findings-out ./out -- node ./my-server.js
+mcpwn badge --findings ./out -o mcpwn.svg      # or: mcpwn badge --count 0 -o mcpwn.svg
+```
+
+0 findings renders green; any findings render red.
+
+### Config file
+
+Commit a baseline invocation instead of retyping flags. Drop a
+`mcpwn.config.json` next to your server and mcpwn auto-loads it (opt out with
+`--no-auto-config`, or point elsewhere with `--config <file>`). Precedence is
+**defaults < config < CLI flags**, so a flag always wins.
+
+```jsonc
+{
+  "$schema": "./schema/config.schema.json",
+  "rules": ["attack.json"],
+  "scope": { "methods": ["tools/*"], "direction": "s2c" },
+  "redact": true,
+  "findingsOut": "./out",
+  "failOn": "high"
+}
+```
 
 ## Tamper rules
 
@@ -299,19 +454,27 @@ tamper a batched server, split it upstream or open an issue.
 
 ## Hunting bugs
 
-[**docs/AUDITING.md**](./docs/AUDITING.md) is a playbook that maps each threat
-class to a concrete mcpwn workflow — path traversal, SSRF, command injection,
-indirect prompt injection, tool poisoning, rug pulls, and sampling abuse — plus
-the bundled payload libraries in [`payloads/`](./payloads) (list them with
-`mcpwn payloads list`, print one with `mcpwn payloads show <name>`). When you
-find something, use [docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md)
-and disclose responsibly.
+[**docs/THREATS.md**](./docs/THREATS.md) is the MCP threat taxonomy — a
+maintained catalogue of every attack class (indirect prompt injection, tool
+poisoning, tool shadowing, rug pull, sampling abuse, elicitation phishing,
+confused deputy, token passthrough, SSRF / path traversal / command injection,
+data exfiltration, invisible-unicode smuggling, injection→action chaining) with
+its CWE, the mcpwn detector / template / dvmcp server that covers it, and the
+fix. [**docs/AUDITING.md**](./docs/AUDITING.md) is the hands-on playbook that
+maps those classes to concrete mcpwn workflows — plus the bundled payload
+libraries in [`payloads/`](./payloads) (list them with `mcpwn payloads list`,
+print one with `mcpwn payloads show <name>`).
+
+When you find something, turn the findings into CVSS v3.1 + CWE advisories with
+`mcpwn advisory <findings-dir> -o <dir>`, use
+[docs/ADVISORY_TEMPLATE.md](./docs/ADVISORY_TEMPLATE.md), and disclose
+responsibly.
 
 ## Contributing
 
 Issues and PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the layout, the invariants, and how to add a new rule kind or transport. For anything you find against third-party MCP servers, please follow [SECURITY.md](./SECURITY.md) and disclose responsibly.
 
-Generate the browsable **API reference** locally with `npm run docs:api` (TypeDoc → `docs/api/`, git-ignored). Zero runtime dependencies; dev tooling is ESLint + Prettier + c8 + TypeDoc (`npm run lint` / `format` / `coverage` / `docs:api`).
+The browsable **API reference** is published to [GitHub Pages](https://moizxsec.github.io/mcpwn/) on every push to `main` (TypeDoc); generate it locally with `npm run docs:api` (→ `docs/api/`, git-ignored). Zero runtime dependencies; dev tooling is ESLint + Prettier + c8 + TypeDoc (`npm run lint` / `format` / `coverage` / `docs:api`).
 
 ## License
 

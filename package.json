@@ -34,6 +34,9 @@
     "examples",
     "payloads",
     "schema",
+    "templates",
+    "action.yml",
+    "docs/mcpwn.1",
     "README.md"
   ],
   "scripts": {
@@ -48,7 +51,9 @@
     "demo:server": "node examples/vulnerable-server.mjs",
     "demo:http": "node examples/vulnerable-server-http.mjs",
     "demo": "node examples/run-demo.mjs",
+    "dvmcp": "node examples/dvmcp/index.mjs",
     "gif": "node tools/gen-gif.mjs",
+    "man": "node dist/cli.js man > docs/mcpwn.1",
     "prepublishOnly": "npm run build"
   },
   "engines": {

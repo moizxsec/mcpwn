@@ -10,11 +10,23 @@ import type { Direction, MessageKind, Rule } from "../types.js";
 
 export type ValidationResult = { ok: true; rules: Rule[] } | { ok: false; errors: string[] };
 
+/** Options for {@link validateRuleFile}. */
+export interface ValidateOptions {
+  /** Extra action kinds to accept beyond the built-ins — the `kind`s registered
+   *  by `--rule-plugin` (§3.11). A rule referencing one of these passes with no
+   *  per-field checks (only the plugin knows its own schema) and any extra
+   *  fields are allowed. */
+  actionKinds?: string[];
+}
+
 const DIRECTIONS: Direction[] = ["client->server", "server->client"];
 const MESSAGE_KINDS: MessageKind[] = ["request", "response", "error", "notification", "unknown"];
 const ACTION_KINDS = [
   "injectToolResult",
   "poisonDescription",
+  "injectResource",
+  "poisonPrompt",
+  "tamperSampling",
   "matchReplace",
   "setArg",
   "rewriteArgs",
@@ -25,10 +37,23 @@ const MODES = ["append", "prepend", "replace"];
 const REWRITE_MODES = ["replace", "merge"];
 
 /** Allowed keys per rule and per action kind — used for typo detection. */
-const RULE_FIELDS = ["name", "enabled", "direction", "method", "kind", "action"];
+const RULE_FIELDS = [
+  "name",
+  "enabled",
+  "direction",
+  "method",
+  "kind",
+  "afterCalls",
+  "when",
+  "action",
+];
+const WHEN_FIELDS = ["contains"];
 const ACTION_FIELDS: Record<string, string[]> = {
   injectToolResult: ["kind", "text", "mode"],
   poisonDescription: ["kind", "tool", "text", "mode"],
+  injectResource: ["kind", "text", "mode"],
+  poisonPrompt: ["kind", "text", "mode"],
+  tamperSampling: ["kind", "text", "mode"],
   matchReplace: ["kind", "find", "replace", "flags"],
   setArg: ["kind", "tool", "path", "value"],
   rewriteArgs: ["kind", "tool", "args", "mode"],
@@ -88,7 +113,7 @@ function typeName(v: unknown): string {
 }
 
 /** Validate a whole rule file (already JSON-parsed). Collects every error. */
-export function validateRuleFile(data: unknown): ValidationResult {
+export function validateRuleFile(data: unknown, opts: ValidateOptions = {}): ValidationResult {
   if (!isPlainObject(data)) {
     return {
       ok: false,
@@ -106,13 +131,14 @@ export function validateRuleFile(data: unknown): ValidationResult {
   }
 
   const errors: string[] = [];
-  data.rules.forEach((rule, i) => validateRule(rule, `rules[${i}]`, errors));
+  const extraKinds = opts.actionKinds ?? [];
+  data.rules.forEach((rule, i) => validateRule(rule, `rules[${i}]`, errors, extraKinds));
 
   if (errors.length) return { ok: false, errors };
   return { ok: true, rules: data.rules as Rule[] };
 }
 
-function validateRule(rule: unknown, path: string, errors: string[]): void {
+function validateRule(rule: unknown, path: string, errors: string[], extraKinds: string[]): void {
   if (!isPlainObject(rule)) {
     errors.push(`${path}: must be an object (got ${typeName(rule)})`);
     return;
@@ -149,6 +175,19 @@ function validateRule(rule: unknown, path: string, errors: string[]): void {
     );
   }
 
+  // afterCalls (optional, non-negative integer)
+  if ("afterCalls" in rule) {
+    const n = rule.afterCalls;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+      errors.push(`${path}.afterCalls: must be a non-negative integer (got ${render(n)})`);
+    }
+  }
+
+  // when (optional predicate object)
+  if ("when" in rule) {
+    validateWhen(rule.when, `${path}.when`, errors);
+  }
+
   // Unknown rule-level keys (typo detection).
   for (const key of Object.keys(rule)) {
     if (!RULE_FIELDS.includes(key)) {
@@ -161,10 +200,30 @@ function validateRule(rule: unknown, path: string, errors: string[]): void {
     errors.push(`${path}: missing required "action"`);
     return;
   }
-  validateAction(rule.action, `${path}.action`, errors);
+  validateAction(rule.action, `${path}.action`, errors, extraKinds);
 }
 
-function validateAction(action: unknown, path: string, errors: string[]): void {
+function validateWhen(when: unknown, path: string, errors: string[]): void {
+  if (!isPlainObject(when)) {
+    errors.push(`${path}: must be an object (got ${typeName(when)})`);
+    return;
+  }
+  if ("contains" in when && typeof when.contains !== "string") {
+    errors.push(`${path}.contains: must be a string (got ${typeName(when.contains)})`);
+  }
+  for (const key of Object.keys(when)) {
+    if (!WHEN_FIELDS.includes(key)) {
+      errors.push(`${path}: unknown field "${key}"${suggest(key, WHEN_FIELDS)}`);
+    }
+  }
+}
+
+function validateAction(
+  action: unknown,
+  path: string,
+  errors: string[],
+  extraKinds: string[]
+): void {
   if (!isPlainObject(action)) {
     errors.push(`${path}: must be an object (got ${typeName(action)})`);
     return;
@@ -174,8 +233,12 @@ function validateAction(action: unknown, path: string, errors: string[]): void {
     return;
   }
   const kind = action.kind;
+  // A kind registered by a `--rule-plugin` (§3.11) is accepted as-is: the plugin
+  // owns its own schema, so we neither check its fields nor flag extra keys.
+  if (typeof kind === "string" && extraKinds.includes(kind)) return;
+  const knownKinds = extraKinds.length ? [...ACTION_KINDS, ...extraKinds] : ACTION_KINDS;
   if (typeof kind !== "string" || !ACTION_KINDS.includes(kind as (typeof ACTION_KINDS)[number])) {
-    errors.push(`${path}: unknown kind ${render(kind)}${suggest(String(kind), ACTION_KINDS)}`);
+    errors.push(`${path}: unknown kind ${render(kind)}${suggest(String(kind), knownKinds)}`);
     return;
   }
 
@@ -188,6 +251,12 @@ function validateAction(action: unknown, path: string, errors: string[]): void {
     case "poisonDescription":
       requireString(action, "text", path, errors);
       optionalString(action, "tool", path, errors);
+      optionalMode(action, path, errors);
+      break;
+    case "injectResource":
+    case "poisonPrompt":
+    case "tamperSampling":
+      requireString(action, "text", path, errors);
       optionalMode(action, path, errors);
       break;
     case "matchReplace":

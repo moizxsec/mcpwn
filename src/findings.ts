@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Direction } from "./types.js";
+import { advisoryFor } from "./advisory.js";
 
 /**
  * Findings model + writers (§3.5). Detectors (§3.4, §3.9) record observations
@@ -64,8 +66,9 @@ const SEVERITY_ORDER: Record<Severity, number> = {
   info: 4,
 };
 
-/** Most-severe first; ties keep insertion order (stable sort). */
-function bySeverity(findings: Finding[]): Finding[] {
+/** Most-severe first; ties keep insertion order (stable sort). Exported so
+ *  other writers (e.g. the HTML report) order findings identically. */
+export function bySeverity(findings: Finding[]): Finding[] {
   return findings
     .map((f, i) => ({ f, i }))
     .sort((a, b) => {
@@ -145,6 +148,22 @@ export function writeMarkdown(findings: Finding[]): string {
 
 type SarifLevel = "error" | "warning" | "note";
 
+/** SARIF `partialFingerprints` key — versioned so the hashing basis can change
+ *  later without silently colliding with old fingerprints. */
+export const FINGERPRINT_KEY = "mcpwn/v1";
+
+/**
+ * A stable, content-addressed fingerprint for a finding (detector id + method +
+ * tool + evidence). SARIF consumers (GitHub code-scanning, Azure DevOps, …)
+ * use `partialFingerprints` to track "the same" alert across runs, so an
+ * unchanged finding never churns as resolved-then-reopened between scans. It is
+ * deterministic: identical inputs always hash to the same hex, two runs apart.
+ */
+export function fingerprint(f: Finding): string {
+  const basis = [f.id, f.method ?? "", f.tool ?? "", f.evidence ?? ""].join("\u0000");
+  return createHash("sha256").update(basis).digest("hex");
+}
+
 /** critical/high → error, medium → warning, low/info → note (§3.5). */
 export function sarifLevel(severity: Severity): SarifLevel {
   switch (severity) {
@@ -167,12 +186,27 @@ export function writeSarif(findings: Finding[]): string {
   for (const f of findings) {
     if (ruleIndex.has(f.id)) continue;
     ruleIndex.set(f.id, rules.length);
-    rules.push({
+    const rule: Record<string, unknown> = {
       id: f.id,
       name: f.id,
       shortDescription: { text: f.title },
       defaultConfiguration: { level: sarifLevel(f.severity) },
-    });
+    };
+    // Additive CWE/CVSS metadata (§Phase-9 C2). `security-severity` + the
+    // `external/cwe/...` tag are the GitHub code-scanning conventions, so the
+    // CWE and CVSS score surface in the Security tab. Omitted for an unmapped id.
+    const a = advisoryFor(f.id);
+    if (a) {
+      rule.properties = {
+        "security-severity": a.cvssScore.toFixed(1),
+        cwe: a.cwe,
+        cvssScore: a.cvssScore,
+        cvssVector: a.cvssVector,
+        attackClass: a.attackClass,
+        tags: ["security", `external/cwe/${a.cwe.toLowerCase()}`],
+      };
+    }
+    rules.push(rule);
   }
 
   const results = findings.map((f) => {
@@ -185,6 +219,8 @@ export function writeSarif(findings: Finding[]): string {
       ruleIndex: ruleIndex.get(f.id),
       level: sarifLevel(f.severity),
       message: { text },
+      // Stable across runs so CI de-dupes unchanged findings (no alert churn).
+      partialFingerprints: { [FINGERPRINT_KEY]: fingerprint(f) },
     };
     if (logicalLocations.length) result.logicalLocations = logicalLocations;
     return result;

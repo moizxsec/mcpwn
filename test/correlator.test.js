@@ -59,3 +59,61 @@ test("noteRequest ignores non-requests; resolve returns undefined when unknown",
   c.noteRequest(res(1), "server->client"); // not a request -> no-op
   assert.equal(c.resolve(res(1), "client->server"), undefined);
 });
+
+// --- bounded growth: TTL + LRU eviction (long-session safety) ---------------
+
+test("normal request/response timing still correlates with TTL enabled", () => {
+  // A response arriving well within the TTL must resolve exactly as before.
+  const c = new Correlator({ ttlMs: 1000 });
+  c.noteRequest(req(1, "tools/call"), "client->server", 0);
+  assert.equal(c.resolve(res(1), "server->client", 500), "tools/call");
+});
+
+test("an unanswered request past its TTL is evicted, not leaked", () => {
+  const c = new Correlator({ ttlMs: 1000 });
+  c.noteRequest(req(1, "tools/call"), "client->server", 0);
+  // A later request triggers lazy eviction of the expired entry.
+  c.noteRequest(req(2, "tools/list"), "client->server", 5000);
+  assert.equal(c.size(), 1, "expired entry should have been reaped");
+  // The stale response can no longer misattribute.
+  assert.equal(c.resolve(res(1), "server->client", 5000), undefined);
+  // The fresh one still correlates.
+  assert.equal(c.resolve(res(2), "server->client", 5000), "tools/list");
+});
+
+test("a response that itself arrives past the TTL is treated as absent", () => {
+  const c = new Correlator({ ttlMs: 1000 });
+  c.noteRequest(req(1, "tools/call"), "client->server", 0);
+  assert.equal(c.resolve(res(1), "server->client", 2000), undefined);
+});
+
+test("maxEntries bounds the in-flight map; oldest requests evicted first", () => {
+  const c = new Correlator({ ttlMs: 0, maxEntries: 3 }); // TTL off, size cap only
+  for (let id = 1; id <= 5; id++) {
+    c.noteRequest(req(id, `m/${id}`), "client->server", id);
+  }
+  assert.equal(c.size(), 3, "map should be capped at maxEntries");
+  // The two oldest (1,2) were evicted; the newest three survive.
+  assert.equal(c.resolve(res(1), "server->client"), undefined);
+  assert.equal(c.resolve(res(2), "server->client"), undefined);
+  assert.equal(c.resolve(res(3), "server->client"), "m/3");
+  assert.equal(c.resolve(res(4), "server->client"), "m/4");
+  assert.equal(c.resolve(res(5), "server->client"), "m/5");
+});
+
+test("eviction bounds are configurable and 0 disables them", () => {
+  // TTL disabled (0) + no size cap (0): nothing is ever evicted.
+  const c = new Correlator({ ttlMs: 0, maxEntries: 0 });
+  for (let id = 1; id <= 100; id++) {
+    c.noteRequest(req(id, `m/${id}`), "client->server", id * 10_000_000);
+  }
+  assert.equal(c.size(), 100);
+  assert.equal(c.resolve(res(1), "server->client"), "m/1");
+});
+
+test("default correlator correlates a normal round trip (sane defaults)", () => {
+  // With the shipped defaults, a message pair minutes apart still correlates.
+  const c = new Correlator();
+  c.noteRequest(req(7, "resources/read"), "client->server");
+  assert.equal(c.resolve(res(7), "server->client"), "resources/read");
+});

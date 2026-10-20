@@ -1,0 +1,4 @@
+Q3 roadmap (synthetic / non-sensitive):
+- ship the document viewer
+- add full-text search
+- write more tests

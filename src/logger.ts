@@ -1,6 +1,8 @@
 import { appendFileSync } from "node:fs";
 import type { FlowMessage } from "./types.js";
 import { redact, type RedactPattern } from "./redact.js";
+import type { Finding, Severity } from "./findings.js";
+import type { SessionSummary } from "./core/pipeline.js";
 
 /**
  * All human-facing output goes to STDERR. stdout/stdin are the MCP channel
@@ -19,6 +21,29 @@ const cyan = (s: string) => c("36", s);
 
 function arrow(dir: FlowMessage["direction"]): string {
   return dir === "client->server" ? cyan("C→S") : green("S→C");
+}
+
+const SEVERITY_SUMMARY_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
+
+/**
+ * Build the compact end-of-session summary lines (§3.6) — the proxy analogue of
+ * the `scan` summary. Pure (no I/O) so it is trivially testable; the Logger just
+ * writes what it returns to stderr. Colour codes are left out of the returned
+ * strings so callers can decide; `Logger.sessionSummary` adds dimming.
+ */
+export function formatSessionSummary(s: SessionSummary, findings: Finding[]): string[] {
+  const bySev: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  for (const f of findings) bySev[f.severity] = (bySev[f.severity] ?? 0) + 1;
+  const tools = s.tools.length ? s.tools.join(", ") : "(none)";
+  const sev = SEVERITY_SUMMARY_ORDER.map((k) => `${k}=${bySev[k]}`).join(" ");
+  return [
+    "",
+    "mcpwn session summary",
+    `  messages: ${s.messages} total — tampered=${s.tampered} dropped=${s.dropped}`,
+    `  tools:    ${tools}`,
+    `  findings: ${findings.length} total — ${sev}`,
+    "",
+  ];
 }
 
 export interface LoggerOptions {
@@ -120,6 +145,14 @@ export class Logger {
       } catch {
         /* best-effort session log */
       }
+    }
+  }
+
+  /** Print the end-of-session summary to STDERR only — the MCP stdout channel
+   *  is never touched (NFR-1). Non-intrusive: a few dimmed lines on exit. */
+  sessionSummary(s: SessionSummary, findings: Finding[]) {
+    for (const line of formatSessionSummary(s, findings)) {
+      this.write(line === "" ? "" : dim(line));
     }
   }
 

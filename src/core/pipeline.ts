@@ -1,12 +1,14 @@
 import { parseLine, serialize } from "../engine/parser.js";
 import { Correlator } from "../engine/correlator.js";
-import { applyRules, FuzzState } from "../engine/rules.js";
+import { applyRules, FuzzState, RuleState } from "../engine/rules.js";
 import { inScope, type Scope } from "./scope.js";
 import type { InterceptController } from "../engine/intercept.js";
 import type { Direction, FlowMessage, Rule } from "../types.js";
 import type { Logger, MessageLogExtra } from "../logger.js";
 import type { Detector } from "../detect/detector.js";
 import type { FindingsSink } from "../findings.js";
+import type { RuleActionRegistry } from "../plugins/index.js";
+import type { GuardEngine } from "../guard/guard.js";
 
 /**
  * Transport-agnostic processing options. A transport (stdio, and later HTTP)
@@ -34,6 +36,28 @@ export interface PipelineOptions {
   detectors?: Detector[];
   /** Where detectors record findings. */
   findings?: FindingsSink;
+  /** Custom tamper-action kinds registered via `--rule-plugin` (§3.11). Threaded
+   *  into the rules engine so a rule may reference a plugin's `kind`. */
+  ruleActionPlugins?: RuleActionRegistry;
+  /** Guard-mode firewall (§3.14, `--mode guard`). When set, in-scope messages
+   *  are evaluated against the policy and may be SANITISED or BLOCKED before
+   *  forwarding. Fail-open: a guard that throws forwards the original. Guard mode
+   *  is exclusive of tamper rules (the CLI leaves `rules` empty in guard mode). */
+  guard?: GuardEngine;
+}
+
+/** A compact end-of-session tally the proxy prints on exit (§3.6, mirrors the
+ *  scan summary). Pure counters — accumulating them NEVER changes what is
+ *  forwarded on the wire (Invariant #2). */
+export interface SessionSummary {
+  /** Every message the pipeline processed, in either direction. */
+  messages: number;
+  /** Messages a rule (or the operator) changed or dropped. */
+  tampered: number;
+  /** Messages dropped (a subset of `tampered`). */
+  dropped: number;
+  /** Distinct tool names seen in `tools/call` traffic. */
+  tools: string[];
 }
 
 /** What a single processed message resolves to. */
@@ -63,8 +87,24 @@ export class MessagePipeline {
   /** Per-rule fuzz cursors — owned here so each pipeline has its own state and
    *  no module globals are involved (§3.2). */
   private fuzz = new FuzzState();
+  /** Per-rule match counters for stateful predicates (afterCalls) — owned here
+   *  for the same reason: pipeline-scoped state, never a module global (§3.2). */
+  private ruleState = new RuleState();
+
+  /** Running session tally for the end-of-session summary (§3.6). */
+  private stats = { messages: 0, tampered: 0, dropped: 0, tools: new Set<string>() };
 
   constructor(private opts: PipelineOptions) {}
+
+  /** Snapshot the session counters for the exit summary. */
+  summary(): SessionSummary {
+    return {
+      messages: this.stats.messages,
+      tampered: this.stats.tampered,
+      dropped: this.stats.dropped,
+      tools: [...this.stats.tools].sort(),
+    };
+  }
 
   /** Static scope membership (direction/method/tool), ignoring onlyTampered —
    *  this gates whether rules run and whether the message may be held. */
@@ -107,6 +147,7 @@ export class MessagePipeline {
   }
 
   async process(raw: string, direction: Direction): Promise<ProcessResult> {
+    this.stats.messages++;
     const parsed = parseLine(raw);
 
     // Maintain correlation in BOTH directions, for EVERY message (even out of
@@ -118,6 +159,12 @@ export class MessagePipeline {
     const correlatedMethod = this.correlator.resolve(parsed, direction);
 
     const flow: FlowMessage = { ...parsed, direction, correlatedMethod, ts: Date.now() };
+
+    // Record every tool name we see — before the scope gate, so out-of-scope
+    // (forwarded-untouched) tool traffic still counts toward "tools seen".
+    const method = flow.method ?? flow.correlatedMethod;
+    const toolName = flow.json?.params?.name;
+    if (method === "tools/call" && typeof toolName === "string") this.stats.tools.add(toolName);
 
     // Opaque relay for anything we couldn't parse — never block the wire. Scope
     // still decides visibility (an unparseable line has no method, so a
@@ -141,12 +188,53 @@ export class MessagePipeline {
       return { forward: raw, flow, applied: [], manualEdit: false };
     }
 
+    // Guard mode (§3.14): the defensive firewall. Runs instead of tamper rules.
+    // Fail-open — any throw forwards the ORIGINAL message untouched, so the guard
+    // can never deadlock or silently blackhole the stream.
+    if (this.opts.guard) {
+      try {
+        const decision = this.opts.guard.evaluate(flow);
+        if (decision.action === "block") {
+          this.correlator.forget(parsed, direction);
+          this.stats.tampered++;
+          this.stats.dropped++;
+          this.log(flow, [`guard:block`], true, { forwarded: null }, true);
+          return { forward: null, flow, applied: [`guard:block`], manualEdit: false };
+        }
+        if (decision.action === "sanitize" && decision.sanitized !== undefined) {
+          const out = serialize(decision.sanitized);
+          this.stats.tampered++;
+          this.log(flow, [`guard:sanitize`], false, { forwarded: out }, true);
+          return { forward: out, flow, applied: [`guard:sanitize`], manualEdit: false };
+        }
+        // warn / allow: fall through to forward the original untouched.
+        const applied = decision.action === "warn" ? [`guard:warn`] : [];
+        this.log(flow, applied, false, { forwarded: raw }, true);
+        return { forward: raw, flow, applied, manualEdit: false };
+      } catch (err) {
+        this.opts.logger.error(
+          `guard threw (${(err as Error)?.message ?? err}); forwarding original`
+        );
+        this.log(flow, [], false, { forwarded: raw }, true);
+        return { forward: raw, flow, applied: [], manualEdit: false };
+      }
+    }
+
     // 1) Headless rules run first (auto-tamper).
-    const result = applyRules(this.opts.rules, flow, this.opts.logger, this.fuzz);
+    const result = applyRules(
+      this.opts.rules,
+      flow,
+      this.opts.logger,
+      this.fuzz,
+      this.ruleState,
+      this.opts.ruleActionPlugins
+    );
     if (result.json === null) {
       // Dropped by a rule: don't leak the correlator entry for a dropped
       // request (its reply will never arrive to clear it).
       this.correlator.forget(parsed, direction);
+      this.stats.tampered++;
+      this.stats.dropped++;
       this.log(flow, result.applied, true, { forwarded: null }, true);
       return { forward: null, flow, applied: result.applied, manualEdit: false };
     }
@@ -164,6 +252,8 @@ export class MessagePipeline {
       const decision = await this.opts.intercept.review(flow, outJson);
       if (decision.action === "drop") {
         this.correlator.forget(parsed, direction);
+        this.stats.tampered++;
+        this.stats.dropped++;
         const applied = [...result.applied, "manual-drop"];
         this.log(flow, applied, true, { forwarded: null }, true);
         return { forward: null, flow, applied, manualEdit: false };
@@ -175,6 +265,7 @@ export class MessagePipeline {
       }
     }
 
+    if (result.applied.length > 0 || manualEdit) this.stats.tampered++;
     const out = changed ? serialize(outJson) : raw;
     this.log(flow, result.applied, false, { forwarded: out, manualEdit }, visible);
     return { forward: out, flow, applied: result.applied, manualEdit };

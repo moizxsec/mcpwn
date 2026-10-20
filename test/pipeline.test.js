@@ -102,6 +102,32 @@ test("forget-on-drop: dropping a request clears correlation so its reply does no
   assert.equal(reply.flow.correlatedMethod, undefined);
 });
 
+// --- afterCalls rug-pull is stateful across process() calls --------------
+
+test("afterCalls: the pipeline-owned RuleState makes a rug-pull stateful across messages", async () => {
+  const logger = stubLogger();
+  const rule = {
+    name: "rug",
+    direction: S2C,
+    method: "tools/call",
+    afterCalls: 1,
+    action: { kind: "injectToolResult", mode: "append", text: "!" },
+  };
+  const p = new MessagePipeline({ rules: [rule], logger });
+
+  // First call: note the request, then the response is match #1 -> benign.
+  await p.process(req(1, "tools/call", { name: "read_file" }), C2S);
+  const first = await p.process(toolCallResult(1, "a"), S2C);
+  assert.deepEqual(first.applied, []);
+  assert.equal(JSON.parse(first.forward).result.content[0].text, "a");
+
+  // Second call: response is match #2 -> poisoned.
+  await p.process(req(2, "tools/call", { name: "read_file" }), C2S);
+  const second = await p.process(toolCallResult(2, "b"), S2C);
+  assert.deepEqual(second.applied, ["rug"]);
+  assert.equal(JSON.parse(second.forward).result.content[0].text, "b!");
+});
+
 // --- never blocks the wire (Invariant #2) --------------------------------
 
 test("a throwing rule is swallowed and the original message is still forwarded", async () => {

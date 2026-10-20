@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moizxsec/mcpwn/schema/config.schema.json",
+  "title": "mcpwn.config.json",
+  "description": "Optional project config for mcpwn (§3.13). Commit a baseline invocation — rule/template packs, scope, redaction, findings output, the scan fail-on gate — instead of retyping flags. Precedence is defaults < config < CLI flags. Mirror of the hand-rolled validator in src/config.ts (mcpwn ships zero runtime deps and does not evaluate this schema at runtime).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "rules": {
+      "type": "array",
+      "description": "Tamper-rule files to load (like repeated -r).",
+      "items": { "type": "string" }
+    },
+    "templates": {
+      "type": "array",
+      "description": "Community templates to load by id (like repeated --template).",
+      "items": { "type": "string" }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Interception scope (§3.6).",
+      "properties": {
+        "methods": {
+          "type": "array",
+          "description": "Method globs (like repeated --scope-method).",
+          "items": { "type": "string" }
+        },
+        "tools": {
+          "type": "array",
+          "description": "Tool names (like repeated --scope-tool).",
+          "items": { "type": "string" }
+        },
+        "direction": {
+          "type": "string",
+          "description": "Restrict to one direction (like --scope-direction).",
+          "enum": ["c2s", "s2c"]
+        }
+      }
+    },
+    "redact": {
+      "type": "boolean",
+      "description": "Enable built-in secret redaction in logs (like --redact)."
+    },
+    "redactFile": {
+      "type": "string",
+      "description": "Extra redaction-pattern file (like --redact-file)."
+    },
+    "findingsOut": {
+      "type": "string",
+      "description": "Directory for findings.json/md/sarif on exit (like --findings-out)."
+    },
+    "failOn": {
+      "type": "string",
+      "description": "CI gate severity for mcpwn scan (like --fail-on).",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "log": {
+      "type": "string",
+      "description": "JSONL session-log path (like -l)."
+    },
+    "verbose": {
+      "type": "boolean",
+      "description": "Pretty-print full message bodies (like -v)."
+    }
+  }
+}

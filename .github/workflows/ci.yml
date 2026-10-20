@@ -52,3 +52,37 @@ jobs:
         run: npm run format:check
       - name: Coverage (src/engine + src/core)
         run: npm run coverage
+
+  demo-assets:
+    name: demo gif drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Build
+        run: npm run build
+      # Re-capture the demo transcript from a real run (no font/ffmpeg needed)
+      # and fail if the committed transcript is stale — the demo drifted but the
+      # asset was not regenerated. Deterministic + font-independent, so it never
+      # flakes on the renderer.
+      - name: Regenerate the demo transcript
+        run: node tools/gen-gif.mjs --capture-only
+      - name: Fail if the committed demo transcript is out of date
+        run: git diff --exit-code -- assets/.demo-transcript.txt
+      # Smoke-render the GIF so the headless pipeline can't silently rot. We do
+      # NOT byte-compare the GIF: ffmpeg / font differences across runners make
+      # that flaky. Render deps are installed best-effort; if unavailable the
+      # render is skipped rather than failing CI.
+      - name: Install headless render deps (best-effort)
+        id: renderdeps
+        continue-on-error: true
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+      - name: Smoke-render the demo GIF
+        if: steps.renderdeps.outcome == 'success'
+        run: |
+          node tools/gen-gif.mjs --no-capture
+          test -s assets/demo.gif

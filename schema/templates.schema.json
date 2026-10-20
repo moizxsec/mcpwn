@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/moizxsec/mcpwn/schema/templates.schema.json",
+  "title": "mcpwn community template (rule-pack + metadata)",
+  "description": "A nuclei-style mcpwn template: the same tamper-rule array a -r file carries (schema/rules.schema.json) plus an id + info metadata block describing the attack it encodes. Mirror of the hand-rolled validator in src/templates/index.ts (mcpwn ships zero runtime deps and does not evaluate this schema at runtime).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "info", "rules"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "minLength": 1 },
+    "info": { "$ref": "#/$defs/info" },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "rules.schema.json#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "author", "severity", "attackClass", "description"],
+      "properties": {
+        "name": { "type": "string" },
+        "author": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info"]
+        },
+        "attackClass": { "type": "string" },
+        "description": { "type": "string" },
+        "references": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "cwe": { "type": "string" },
+        "mcpVersion": { "type": "string" }
+      }
+    }
+  }
+}

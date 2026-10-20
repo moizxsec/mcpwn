@@ -3,6 +3,7 @@ import type { Direction, FlowMessage, Rule, RuleAction } from "../types.js";
 import { validateRuleFile } from "./validate.js";
 import { setPath } from "./jsonpath.js";
 import { loadPayloads } from "../payloads/index.js";
+import type { RuleActionRegistry } from "../plugins/index.js";
 
 export interface RuleResult {
   /** The (possibly rewritten) JSON to forward, or null to DROP the message. */
@@ -30,6 +31,25 @@ export class FuzzState {
   }
 }
 
+/**
+ * Per-rule match counters for stateful predicates (§3.2). `afterCalls` turns a
+ * rule into a rug-pull: benign for the first N matches, then tampering. Like
+ * {@link FuzzState} this lives in a pipeline-owned instance threaded into
+ * {@link applyRules} — never a module global — so two concurrent pipelines keep
+ * independent counts.
+ */
+export class RuleState {
+  private counts = new Map<string, number>();
+
+  /** Record that this rule matched and return its new 1-indexed match count.
+   *  Call exactly once per message the rule matches. */
+  next(key: string): number {
+    const c = (this.counts.get(key) ?? 0) + 1;
+    this.counts.set(key, c);
+    return c;
+  }
+}
+
 /** Collaborators an action needs beyond the message JSON: the flow's method +
  *  direction (so argument-tampering actions can self-gate to client->server
  *  tools/call) and a cursor advance for fuzzArgs. */
@@ -38,6 +58,10 @@ interface ApplyContext {
   method?: string;
   /** Advance and return this rule's fuzz cursor. */
   nextFuzzIndex: () => number;
+  /** Custom action kinds registered via `--rule-plugin` (§3.11). Consulted when
+   *  an action kind is not one of the built-ins. Undefined when no plugins are
+   *  loaded, so the engine behaves exactly as before. */
+  actionPlugins?: RuleActionRegistry;
 }
 
 /** Minimal logging surface used for rule-failure reporting; the real Logger
@@ -46,9 +70,12 @@ export interface RuleLogger {
   error(text: string): void;
 }
 
-export function loadRules(path: string): Rule[] {
+export function loadRules(path: string, extraActionKinds?: string[]): Rule[] {
   const data = JSON.parse(readFileSync(path, "utf8"));
-  const result = validateRuleFile(data);
+  // `extraActionKinds` are custom kinds registered via `--rule-plugin` (§3.11);
+  // the validator accepts them (with no field checks, since only the plugin
+  // knows its own schema) instead of rejecting them as unknown.
+  const result = validateRuleFile(data, { actionKinds: extraActionKinds });
   if (!result.ok) {
     // Surface every problem at once; the CLI logs this and exits 2.
     throw new Error(`invalid rule file:\n  - ${result.errors.join("\n  - ")}`);
@@ -89,10 +116,51 @@ function isToolCall(ctx: ApplyContext): boolean {
   return ctx.direction === "client->server" && ctx.method === "tools/call";
 }
 
+/** `tamperSampling` applies ONLY to a server->client sampling/createMessage
+ *  request (a server->model prompt we rewrite before the client runs it). */
+function isSampling(ctx: ApplyContext): boolean {
+  return ctx.direction === "server->client" && ctx.method === "sampling/createMessage";
+}
+
+/** Tamper the `.text` of an MCP content value, which may be a single content
+ *  object ({type:"text", text}) or an array of them. Returns true if any text
+ *  was changed. Non-object / non-text content is skipped, never thrown on. */
+function tamperContentText(content: any, text: string, mode: string | undefined): boolean {
+  if (Array.isArray(content)) {
+    let changed = false;
+    for (const b of content) {
+      if (b && typeof b === "object" && typeof b.text === "string") {
+        b.text = applyText(b.text, text, mode);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+  if (content && typeof content === "object" && typeof content.text === "string") {
+    content.text = applyText(content.text, text, mode);
+    return true;
+  }
+  return false;
+}
+
+/** Tamper a base64 `blob` by decoding it as UTF-8, applying the text, and
+ *  re-encoding — so the mutation survives a client that decodes the resource. */
+function tamperBlob(blob: string, text: string, mode: string | undefined): string {
+  const decoded = Buffer.from(blob, "base64").toString("utf8");
+  return Buffer.from(applyText(decoded, text, mode), "utf8").toString("base64");
+}
+
 /** An optional `tool` filter matches against params.name. No filter = any. */
 function toolMatches(tool: string | undefined, json: any): boolean {
   if (tool === undefined) return true;
   return json?.params?.name === tool;
+}
+
+/** `when.contains`: does `substr` appear anywhere in the message JSON? Checked
+ *  against the serialized body so it spans results, resources, prompt messages,
+ *  descriptions and arguments alike without the rule naming a path. */
+function messageContains(json: any, substr: string): boolean {
+  return JSON.stringify(json).includes(substr);
 }
 
 /** Ensure json.params.arguments is an object and return it, creating as needed. */
@@ -171,6 +239,63 @@ function applyAction(action: RuleAction, json: any, ctx: ApplyContext): boolean 
       return changed;
     }
 
+    case "injectResource": {
+      // server->client resources/read response: result.contents[] text/blob.
+      // Shape-gated like injectToolResult (method comes via correlation on the
+      // rule, so we don't re-check it here).
+      const contents = json?.result?.contents;
+      if (!Array.isArray(contents)) return false;
+      const target = contents.find(
+        (c: any) => c && typeof c === "object" && typeof c.text === "string"
+      );
+      if (target) {
+        target.text = applyText(target.text, action.text, action.mode);
+        return true;
+      }
+      const blobTarget = contents.find(
+        (c: any) => c && typeof c === "object" && typeof c.blob === "string"
+      );
+      if (blobTarget) {
+        blobTarget.blob = tamperBlob(blobTarget.blob, action.text, action.mode);
+        return true;
+      }
+      // No existing text/blob to tamper: mirror injectToolResult and append a
+      // fresh text content (a valid resource content carries a uri), unless
+      // replacing (replace only ever rewrites what is already there).
+      if (action.mode !== "replace") {
+        contents.push({ uri: "mcpwn://injected", mimeType: "text/plain", text: action.text });
+        return true;
+      }
+      return false;
+    }
+
+    case "poisonPrompt": {
+      // server->client prompts/get response: every result.messages[].content.text.
+      const messages = json?.result?.messages;
+      if (!Array.isArray(messages)) return false;
+      let changed = false;
+      for (const m of messages) {
+        if (m == null || typeof m !== "object") continue;
+        if (tamperContentText(m.content, action.text, action.mode)) changed = true;
+      }
+      return changed;
+    }
+
+    case "tamperSampling": {
+      // server->client sampling/createMessage REQUEST: rewrite the server-supplied
+      // model prompt in params.messages[].content.text. Self-gated (the method is
+      // on the wire for a request) like the argument-tampering actions.
+      if (!isSampling(ctx)) return false;
+      const messages = json?.params?.messages;
+      if (!Array.isArray(messages)) return false;
+      let changed = false;
+      for (const m of messages) {
+        if (m == null || typeof m !== "object") continue;
+        if (tamperContentText(m.content, action.text, action.mode)) changed = true;
+      }
+      return changed;
+    }
+
     case "setArg": {
       // Argument tampering is scoped to client->server tools/call; anything
       // else is a silent no-op (like the other filtered actions).
@@ -208,11 +333,34 @@ function applyAction(action: RuleAction, json: any, ctx: ApplyContext): boolean 
     }
 
     default: {
-      // Unreachable for well-formed rules (the loader validates kinds), but an
-      // unknown kind must FAIL LOUD here rather than silently no-op: the per-rule
+      // Unknown to the built-in switch. First see whether a loaded plugin (§3.11)
+      // claims this kind; a custom action gets the SAME treatment as a built-in —
+      // it self-gates on ctx.direction/method (scope) and any throw is rolled
+      // back by applyRules below. The plugin is handed a deep CLONE of the
+      // message, so it only takes effect by RETURNING the mutated JSON (a
+      // functional contract — mutating the clone and returning undefined is a
+      // deliberate no-op), mirroring how a built-in returns `changed`.
+      const kind = (action as { kind?: unknown }).kind;
+      const plugin = typeof kind === "string" ? ctx.actionPlugins?.get(kind) : undefined;
+      if (plugin) {
+        const clone = JSON.parse(JSON.stringify(json));
+        const next = plugin.apply(
+          { direction: ctx.direction, method: ctx.method, message: clone },
+          action as unknown as Record<string, unknown>
+        );
+        if (next === undefined || next === null) return false;
+        if (typeof next !== "object" || Array.isArray(next)) {
+          throw new Error(
+            `rule-plugin "${kind}" must return a JSON object message (got ${typeof next})`
+          );
+        }
+        for (const k of Object.keys(json)) delete json[k];
+        Object.assign(json, next);
+        return true;
+      }
+      // Truly unknown kind: FAIL LOUD rather than silently no-op. The per-rule
       // try/catch in applyRules turns this throw into a logged error and forwards
       // the message untampered, so the wire is never blocked (NFR-8).
-      const kind = (action as { kind?: unknown }).kind;
       throw new Error(`unknown action kind: ${String(kind)}`);
     }
   }
@@ -231,7 +379,9 @@ export function applyRules(
   rules: Rule[],
   msg: FlowMessage,
   logger?: RuleLogger,
-  fuzz?: FuzzState
+  fuzz?: FuzzState,
+  state?: RuleState,
+  actionPlugins?: RuleActionRegistry
 ): RuleResult {
   if (!msg.json) return { json: msg.json, applied: [], changed: false };
 
@@ -242,6 +392,17 @@ export function applyRules(
 
   for (const rule of rules) {
     if (!matches(rule, msg)) continue;
+
+    // Stateful rug-pull (§3.2): count this match and keep the message benign
+    // until the rule has matched MORE than `afterCalls` times. A stateless
+    // caller always sees match #1, so afterCalls is a no-op without threaded
+    // state (like the fuzz cursor defaulting to the first payload).
+    const matchCount = state ? state.next(rule.name) : 1;
+    if (rule.afterCalls !== undefined && matchCount <= rule.afterCalls) continue;
+
+    // Conditional gate (§3.2): only act when the message carries the substring.
+    if (rule.when?.contains !== undefined && !messageContains(json, rule.when.contains)) continue;
+
     if (rule.action.kind === "drop") {
       return { json: null, applied: [...applied, rule.name], changed: true };
     }
@@ -252,6 +413,7 @@ export function applyRules(
       // Cursor keyed per rule name; falls back to 0 when no state is threaded
       // (e.g. a unit test), so a stateless caller always gets the first payload.
       nextFuzzIndex: () => (fuzz ? fuzz.next(rule.name) : 0),
+      actionPlugins,
     };
 
     // Snapshot before the (mutating) action so a throw rolls back cleanly.

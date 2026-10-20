@@ -1,0 +1,3 @@
+Welcome to the DVMCP document store.
+This directory (public/) holds notes a user is allowed to read.
+Nothing secret lives here. Try reading me with: read_doc { "path": "welcome.txt" }

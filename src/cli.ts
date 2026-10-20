@@ -8,6 +8,7 @@ import { InterceptController } from "./engine/intercept.js";
 import { Logger } from "./logger.js";
 import { loadPayloads, listPayloads } from "./payloads/index.js";
 import { runReplay } from "./replay.js";
+import { runScan } from "./core/scan.js";
 import { ArrayFindingsSink, writeFindingsDir, type FindingsSink } from "./findings.js";
 import { builtinLinters } from "./detect/linter.js";
 import {
@@ -31,6 +32,7 @@ USAGE
   mcpwn http --listen host:port --upstream <url> [options]
   mcpwn baseline capture [--out <file>] [options] -- <command> [args...]
   mcpwn replay <session.jsonl> [options] -- <command> [args...]
+  mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
   mcpwn payloads list | show <name>
 
   Wraps a stdio MCP server: the host launches mcpwn, mcpwn launches the
@@ -73,6 +75,18 @@ SUBCOMMANDS
   replay <session.jsonl> -- <cmd>   Replay recorded client->server traffic
                                     through a fresh server (rules apply).
                                     Flags: -r, -l, -v, --only-method, --repeat <n>
+  scan [options] -- <cmd>           Self-driving active scanner — NO agent in the
+  scan --http <url> [options]       loop. Drives the handshake, enumerates every
+                                    surface (tools/resources/prompts, paginated),
+                                    samples resource/prompt content and runs all
+                                    passive detectors over the responses.
+                                    Flags: --fuzz (active tool fuzzing, default
+                                    off), --findings-out <dir>, --fail-on
+                                    critical|high|medium|low|info (default high),
+                                    --timeout <ms>, --budget <ms>, --fuzz-max <n>,
+                                    --sample-max <n>, --scope-method <glob>,
+                                    --scope-tool <name>, -l <file>, -v. Exits
+                                    nonzero when a finding meets --fail-on (CI).
   payloads list                     List bundled payload libraries.
   payloads show <name>              Print a payload library (one per line).
 
@@ -86,6 +100,10 @@ EXAMPLES
   # Rug-pull detection: capture once, then watch for tool-definition drift
   mcpwn baseline capture --out base.json -- node ./my-server.js
   mcpwn --baseline base.json --findings-out ./out -- node ./my-server.js
+
+  # Self-driving scan: point it at a server, fuzz it, fail CI on high findings
+  mcpwn scan --fuzz --findings-out ./out -- node ./my-server.js
+  mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
 
   # Reverse-proxy a remote HTTP MCP server
   mcpwn http --listen 127.0.0.1:8900 --upstream https://mcp.example.com/mcp \\
@@ -527,6 +545,7 @@ async function main() {
   // is not mistaken for the proxied command.
   if (argv[0] === "payloads") process.exit(runPayloads(argv.slice(1)));
   if (argv[0] === "replay") process.exit(await runReplay(argv.slice(1)));
+  if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));
   if (argv[0] === "http") process.exit(await runHttp(argv.slice(1)));
 

@@ -41,6 +41,11 @@ import type { Scope } from "./core/scope.js";
 import type { Direction, Rule } from "./types.js";
 import { GuardEngine } from "./guard/guard.js";
 import { loadPolicy, defaultPolicy, findDefaultPolicy, PolicyError } from "./guard/policy.js";
+import { runWrap, runUnwrap } from "./wrap.js";
+import { runInit } from "./init.js";
+import { runCompletions } from "./completions.js";
+import { runBadge } from "./badge.js";
+import { runMan } from "./manpage.js";
 
 const HELP = `mcpwn — intercept & tamper proxy for MCP traffic
 
@@ -57,6 +62,10 @@ USAGE
   mcpwn report <session.jsonl> [--findings <dir>] -o report.html
   mcpwn payloads list | show <name>
   mcpwn templates list | show <id> | lint [dir]
+  mcpwn wrap --client <claude-desktop|cursor|cline|vscode|windsurf> [--dry-run]
+  mcpwn unwrap --client <...>   |   mcpwn init [--yes]
+  mcpwn completions <bash|zsh|fish>   |   mcpwn badge --count <n> [-o f.svg]
+  mcpwn man
 
   Wraps a stdio MCP server: the host launches mcpwn, mcpwn launches the
   real server and relays traffic, logging every message to stderr.
@@ -148,8 +157,9 @@ SUBCOMMANDS
                                     --timeout <ms>, --budget <ms>, --fuzz-max <n>,
                                     --sample-max <n>, --scope-method <glob>,
                                     --scope-tool <name>, --detector <file.mjs>,
-                                    --pin <file>, --taint, -l <file>, -v. Exits
-                                    nonzero when a finding meets --fail-on (CI).
+                                    --pin <file>, --taint, --badge <file.svg>,
+                                    -l <file>, -v. Exits nonzero when a finding
+                                    meets --fail-on (CI).
   report <session.jsonl> [--findings <dir>] -o report.html
                                     Render a recorded session (+ optional
                                     findings dir) into a SINGLE self-contained,
@@ -165,6 +175,24 @@ SUBCOMMANDS
   templates lint [dir]              Validate every template in dir (default: the
                                     bundled gallery) against the template schema.
                                     Exits nonzero on any invalid template.
+  wrap --client <id> [--server <name>] [--dry-run] [--config-path <file>]
+                                    Route a client's configured MCP servers
+                                    THROUGH mcpwn: find its config (per-OS path),
+                                    back it up (<file>.mcpwn.bak) and rewrite each
+                                    stdio entry to run under mcpwn. Idempotent;
+                                    --dry-run prints the diff. Clients: claude-
+                                    desktop, cursor, cline, vscode, windsurf.
+  unwrap --client <id> [...]        Restore the backup byte-for-byte (or reverse
+                                    the transform if the backup is gone).
+  init [--yes] [--client <id>]      Detect installed MCP clients, offer to wrap
+                                    one, and write a starter mcpwn.config.json /
+                                    mcpwn.policy.json. Non-interactive: previews
+                                    without --yes, applies with it.
+  completions <bash|zsh|fish>       Print a shell completion script to stdout.
+  badge --count <n> | --findings <dir|file> [-o <file.svg>]
+                                    Emit a static SVG findings badge (green at 0,
+                                    red otherwise) for a README. See scan --badge.
+  man                               Print a roff(1) man page to stdout.
 
 EXAMPLES
   # Passive X-ray: watch all traffic, change nothing
@@ -1010,6 +1038,12 @@ async function main() {
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));
   if (argv[0] === "pin") process.exit(await runPin(argv.slice(1)));
   if (argv[0] === "http") process.exit(await runHttp(argv.slice(1)));
+  if (argv[0] === "wrap") process.exit(await runWrap(argv.slice(1)));
+  if (argv[0] === "unwrap") process.exit(await runUnwrap(argv.slice(1)));
+  if (argv[0] === "init") process.exit(await runInit(argv.slice(1)));
+  if (argv[0] === "completions") process.exit(runCompletions(argv.slice(1)));
+  if (argv[0] === "badge") process.exit(runBadge(argv.slice(1)));
+  if (argv[0] === "man") process.exit(runMan());
 
   const cfg = resolveConfig(argv, (msg) => {
     process.stderr.write(`mcpwn: ${msg}\n`);

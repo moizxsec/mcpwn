@@ -1,0 +1,36 @@
+# Example: scan an MCP server on every PR and publish results to the Security tab.
+#
+# Copy this into your OWN repository as .github/workflows/mcpwn-scan.yml and edit
+# `server-command` (or `http-url`). It is named *.example.yml here so it does not
+# run inside the mcpwn repo itself.
+name: MCP security scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  # Required for github/codeql-action/upload-sarif to post into the Security tab.
+  security-events: write
+
+jobs:
+  mcpwn:
+    name: mcpwn scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build your server first if it needs compiling, e.g.:
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: "20" }
+      # - run: npm ci && npm run build
+
+      - name: Scan the MCP server
+        uses: moizxsec/mcpwn@main # or a pinned release tag
+        with:
+          server-command: "node ./my-server.js"
+          # http-url: "https://mcp.example.com/mcp"   # ...or scan a remote server
+          fail-on: high
+          fuzz: "true"

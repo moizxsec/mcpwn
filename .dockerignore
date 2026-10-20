@@ -1,0 +1,14 @@
+.git
+node_modules
+dist
+coverage
+docs/api
+docs/mcpwn.1
+assets
+test
+tools
+*.log
+*.tgz
+.env
+.npmrc
+.github

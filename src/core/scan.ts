@@ -8,6 +8,8 @@ import { builtinLinters } from "../detect/linter.js";
 import { PinDetector, loadPin } from "../detect/pin.js";
 import { TaintDetector } from "../detect/taint.js";
 import { ArrayFindingsSink, writeFindingsDir, type Finding, type Severity } from "../findings.js";
+import { findingsBadge } from "../badge.js";
+import { writeFileSync } from "node:fs";
 import { loadPayloads } from "../payloads/index.js";
 import { loadDetectorPlugin } from "../plugins/index.js";
 import { Logger } from "../logger.js";
@@ -98,6 +100,8 @@ export interface ScanArgs {
   pinFile?: string;
   /** Provenance tainting (`--taint`, §3.14/A4). */
   taint: boolean;
+  /** Emit a static SVG findings badge to this file (`--badge <file.svg>`). */
+  badge?: string;
   /** One-line notice to log when a config file was loaded (§3.13). */
   configNotice?: string;
 }
@@ -214,6 +218,9 @@ export function parseScanArgs(argv: string[]): ScanArgs {
         break;
       case "--taint":
         out.taint = true;
+        break;
+      case "--badge":
+        out.badge = value(a);
         break;
       // Resolved in the pre-scan above; consume the tokens so they are not
       // mistaken for the server command.
@@ -873,6 +880,14 @@ export async function runScan(argv: string[]): Promise<number> {
       logger.info(`wrote ${items.length} finding(s) -> ${args.findingsOut}`);
     } catch (err) {
       logger.error(`could not write findings: ${(err as Error).message}`);
+    }
+  }
+  if (args.badge) {
+    try {
+      writeFileSync(args.badge, findingsBadge(items.length));
+      logger.info(`wrote badge (${items.length} finding(s)) -> ${args.badge}`);
+    } catch (err) {
+      logger.error(`could not write badge: ${(err as Error).message}`);
     }
   }
   printSummary(counts, items, args);

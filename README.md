@@ -56,12 +56,22 @@ The demo runs a naive agent against a bundled vulnerable server, *through* mcpwn
 
 ```bash
 npm install -g @moizxsec/mcpwn      # then run:  mcpwn ...
-# or ad-hoc, no install:
+
+# or ad-hoc, zero install:
 npx @moizxsec/mcpwn -- npx -y @some/mcp-server
+
+# or Docker (stdin/stdout are the MCP channel, so run with -i and no -t):
+docker build -t mcpwn .
+docker run --rm -i mcpwn scan --http https://mcp.example.com/mcp
 ```
 
 The installed command is `mcpwn` (the package is published under a scope, but
 the binary name is unscoped). Requires Node ≥ 18. No other runtime dependencies.
+
+**Onboard in one step:** `mcpwn init` detects your installed MCP clients (Claude
+Desktop, Cursor, Cline, VS Code, Windsurf), offers to route one through mcpwn,
+and drops a starter `mcpwn.config.json` / `mcpwn.policy.json`. Shell completions:
+`mcpwn completions <bash|zsh|fish>`; a man page: `mcpwn man` (or `npm run man`).
 
 ## Usage
 
@@ -108,7 +118,28 @@ with no tty, it logs a notice and falls back to auto-forward (rules still apply)
 
 ### Wire it into your MCP client
 
-Wrap the command your client already runs:
+Let mcpwn edit the client's config for you — it finds the file (per-OS standard
+path), **backs it up**, and routes every configured stdio server through mcpwn:
+
+```bash
+mcpwn wrap --client claude-desktop            # or: cursor | cline | vscode | windsurf
+mcpwn wrap --client cursor --server weather --dry-run   # preview one entry, write nothing
+mcpwn unwrap --client claude-desktop          # restore the backup byte-for-byte
+```
+
+`wrap` is idempotent (a second run is a no-op), never clobbers without a
+`*.mcpwn.bak` backup, and `--dry-run` prints the diff. Use `--config-path <file>`
+for a non-standard install. Supported clients and their config paths:
+
+| Client | Config path (per OS) |
+| --- | --- |
+| `claude-desktop` | mac `~/Library/Application Support/Claude/claude_desktop_config.json` · linux `~/.config/Claude/…` · win `%APPDATA%\Claude\…` |
+| `cursor` | `~/.cursor/mcp.json` |
+| `cline` | `…/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
+| `vscode` | `…/Code/User/mcp.json` (uses the `servers` key) |
+| `windsurf` | `~/.codeium/windsurf/mcp_config.json` |
+
+Or do it by hand — the transform is just:
 
 ```jsonc
 // before
@@ -240,6 +271,49 @@ mcpwn --template tool-poisoning --findings-out ./out -- node ./my-server.js
 Custom **detector** and **rule-action plugins** (`--detector` / `--rule-plugin`,
 both load local code you wrote or audited) extend the proxy and the scanner
 alike.
+
+### CI: GitHub Action & scan badge
+
+A reusable composite **GitHub Action** ([`action.yml`](./action.yml)) installs
+mcpwn, scans a server you name, fails the job on findings at/above a severity,
+and uploads `findings.sarif` to the **Security tab** (code scanning):
+
+```yaml
+# .github/workflows/mcpwn-scan.yml  (see .github/workflows/mcpwn-scan.example.yml)
+permissions:
+  contents: read
+  security-events: write          # required to upload SARIF
+jobs:
+  mcpwn:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moizxsec/mcpwn@main  # pin a release tag in practice
+        with:
+          server-command: "node ./my-server.js"   # or: http-url: https://…/mcp
+          fail-on: high
+          fuzz: "true"
+```
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `server-command` | — | stdio server command to scan (or use `http-url`). |
+| `http-url` | — | remote Streamable HTTP server to scan instead. |
+| `fail-on` | `high` | fail the job at/above this severity. |
+| `fuzz` | `false` | enable active tool fuzzing. |
+| `findings-dir` | `mcpwn-findings` | output dir (SARIF is uploaded from here). |
+| `mcpwn-version` | `latest` | npm dist-tag / version to install. |
+| `upload-sarif` | `true` | upload `findings.sarif` to the Security tab. |
+
+**Status badge** — emit a shields-style SVG a server author can embed, from a
+scan or a findings dir:
+
+```bash
+mcpwn scan --badge mcpwn.svg --findings-out ./out -- node ./my-server.js
+mcpwn badge --findings ./out -o mcpwn.svg      # or: mcpwn badge --count 0 -o mcpwn.svg
+```
+
+0 findings renders green; any findings render red.
 
 ### Config file
 

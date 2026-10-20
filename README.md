@@ -227,6 +227,14 @@ mcpwn --baseline base.json --findings-out ./out -- node ./my-server.js
 # Replay recorded client->server traffic through a fresh server (rules apply)
 mcpwn replay session.jsonl -- node ./my-server.js   # --only-method, --repeat <n>
 
+# Differential regression: replay a golden session and diff live vs recorded
+# responses; flags drift AND newly-introduced injection surfaces across versions
+mcpwn diff golden.jsonl --findings-out ./out -- node ./my-server.js  # --ignore <jsonpath>
+
+# MCP spec conformance: framing, initialize caps, id echo, error codes, clean
+# stdout, pagination, ping — security-relevant violations become findings
+mcpwn conformance -- node ./my-server.js            # --json report.json
+
 # Browse the bundled attack payload libraries
 mcpwn payloads list
 mcpwn payloads show path-traversal
@@ -238,6 +246,9 @@ mcpwn payloads show path-traversal
 | `mcpwn baseline capture [--out <file>] -- <cmd>` | Record the first `tools/list` to a baseline file. |
 | `mcpwn pin capture [--out mcpwn.lock] -- <cmd>` | Hash the whole advertised surface (tools + resources + prompts) into a cross-session lockfile for `--pin`. |
 | `mcpwn replay <session.jsonl> -- <cmd>` | Replay recorded `client->server` traffic through a fresh server. |
+| `mcpwn diff <golden.jsonl> -- <cmd>` | Differential replay: diff live vs golden responses; flags drift + new injection surfaces. CI exit via `--fail-on`. |
+| `mcpwn conformance -- <cmd>` | MCP spec conformance checks; security-relevant violations become findings. Nonzero exit on any FAIL. |
+| `mcpwn eval [--agent mock\|command] …` | Agent-susceptibility harness: drive a target agent through the DVMCP suite, score (deterministically) whether it took the bait. |
 | `mcpwn payloads list` / `show <name>` | List / print the bundled payload libraries. |
 
 ## Active scanning, reporting & templates

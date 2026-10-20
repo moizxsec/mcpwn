@@ -247,8 +247,10 @@ export function parseScanArgs(argv: string[]): ScanArgs {
 }
 
 /** A thin MCP client the scanner drives. Both transports funnel every message
- *  through the shared pipeline for detection + correlation. */
-interface ScanClient {
+ *  through the shared pipeline for detection + correlation. Exported so the
+ *  differential `diff` command (src/diff.ts) reuses the exact same handshake,
+ *  id-correlation, ping handling, timeouts and clean shutdown. */
+export interface ScanClient {
   /** Send a request and await its correlated reply (resolved via the
    *  correlator). Rejects on the per-call timeout. */
   request(method: string, params: unknown, timeoutMs: number): Promise<FlowMessage>;
@@ -273,7 +275,7 @@ class ScanTimeout extends Error {
  * JSON-RPC channel. Server-initiated requests are answered inline (ping) or
  * politely declined, so the server never blocks waiting on the scanner.
  */
-async function makeStdioClient(
+export async function makeStdioClient(
   command: string,
   args: string[],
   pipeline: MessagePipeline,
@@ -407,7 +409,10 @@ interface HttpResponse {
  * `text/event-stream`. Session id + negotiated protocol version are echoed back
  * on later requests, as a well-behaved client should.
  */
-async function makeHttpClient(urlStr: string, pipeline: MessagePipeline): Promise<ScanClient> {
+export async function makeHttpClient(
+  urlStr: string,
+  pipeline: MessagePipeline
+): Promise<ScanClient> {
   const url = new URL(urlStr);
   const isHttps = url.protocol === "https:";
   const mod = isHttps ? https : http;

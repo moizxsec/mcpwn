@@ -9,6 +9,8 @@ import { Logger } from "./logger.js";
 import { loadPayloads, listPayloads } from "./payloads/index.js";
 import { runReplay } from "./replay.js";
 import { runScan } from "./core/scan.js";
+import { runDiff } from "./diff.js";
+import { runConformance } from "./conformance.js";
 import { runReport } from "./report.js";
 import { runAdvisory } from "./advisory.js";
 import { ArrayFindingsSink, writeFindingsDir, type FindingsSink } from "./findings.js";
@@ -60,6 +62,8 @@ USAGE
   mcpwn pin capture [--out mcpwn.lock] [options] -- <command> [args...]
   mcpwn replay <session.jsonl> [options] -- <command> [args...]
   mcpwn scan [options] -- <command> [args...]   |   scan --http <url> [options]
+  mcpwn diff <golden.jsonl> [options] -- <command> [args...]   |   diff ... --http <url>
+  mcpwn conformance [options] -- <command> [args...]   |   conformance --http <url>
   mcpwn report <session.jsonl> [--findings <dir>] -o report.html
   mcpwn advisory <findings-dir|findings.json> [-o <dir|file.md>]
   mcpwn payloads list | show <name>
@@ -162,6 +166,31 @@ SUBCOMMANDS
                                     --pin <file>, --taint, --badge <file.svg>,
                                     -l <file>, -v. Exits nonzero when a finding
                                     meets --fail-on (CI).
+  diff <golden.jsonl> [options] -- <cmd>
+  diff <golden.jsonl> --http <url>  Differential record/replay: replay the
+                                    client->server requests from a golden session
+                                    against a (possibly updated) server, diff the
+                                    live responses vs the golden ones, and report
+                                    changed shapes/values, added/removed tools or
+                                    fields, and NEWLY-INTRODUCED injection surfaces
+                                    (detectors run over the new responses).
+                                    Flags: --ignore <jsonpath> (repeatable; drop
+                                    volatile fields before diffing), --findings-out
+                                    <dir>, --fail-on critical|high|medium|low|info
+                                    (default medium), --timeout <ms>, -v. Exits
+                                    nonzero when drift meets --fail-on (CI).
+  conformance [options] -- <cmd>
+  conformance --http <url>          MCP spec conformance checker. Asserts JSON-RPC
+                                    2.0 framing, initialize protocolVersion +
+                                    capabilities, capability/method consistency,
+                                    error codes (-32601 unknown method, -32700/
+                                    -32600 malformed), id echo, no reply to a
+                                    notification, pagination cursor behaviour, ping,
+                                    and NO non-JSON-RPC lines on stdout (the stdio
+                                    footgun). Security-relevant violations become
+                                    findings. Flags: --json <file>, --findings-out
+                                    <dir>, --timeout <ms>, -v. Exits nonzero on any
+                                    FAIL.
   report <session.jsonl> [--findings <dir>] -o report.html
                                     Render a recorded session (+ optional
                                     findings dir) into a SINGLE self-contained,
@@ -220,6 +249,13 @@ EXAMPLES
   # Self-driving scan: point it at a server, fuzz it, fail CI on high findings
   mcpwn scan --fuzz --findings-out ./out -- node ./my-server.js
   mcpwn scan --http https://mcp.example.com/mcp --findings-out ./out
+
+  # Record a golden session once, then differential-diff a later server build
+  mcpwn scan --log golden.jsonl -- node ./my-server.js
+  mcpwn diff golden.jsonl --findings-out ./out -- node ./my-server.js
+
+  # Check a server honours the MCP spec (fails CI on any violation)
+  mcpwn conformance -- node ./my-server.js
 
   # Run a community template (rule-pack) against a server
   mcpwn templates list
@@ -1042,6 +1078,8 @@ async function main() {
   if (argv[0] === "templates") process.exit(runTemplates(argv.slice(1)));
   if (argv[0] === "replay") process.exit(await runReplay(argv.slice(1)));
   if (argv[0] === "scan") process.exit(await runScan(argv.slice(1)));
+  if (argv[0] === "diff") process.exit(await runDiff(argv.slice(1)));
+  if (argv[0] === "conformance") process.exit(await runConformance(argv.slice(1)));
   if (argv[0] === "report") process.exit(await runReport(argv.slice(1)));
   if (argv[0] === "advisory") process.exit(await runAdvisory(argv.slice(1)));
   if (argv[0] === "baseline") process.exit(await runBaseline(argv.slice(1)));

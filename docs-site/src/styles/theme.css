@@ -1,0 +1,158 @@
+/*
+ * mcpwn visual system.
+ *
+ * The dark palette is lifted VERBATIM from src/report.ts (the generated HTML
+ * advisory), so the docs site, the report artifact, and the tool read as one
+ * product. Those exact tokens:
+ *   bg #0d1117 · panel #161b22 · panel2 #0b0f14 · code-bg #010409
+ *   border #30363d · text #c9d1d9 · muted #8b949e · accent #58a6ff
+ *   c2s #56d4dd · s2c #3fb950
+ *   crit #f85149 · high #ff7b43 · med #d29922 · low #3fb950 · info #58a6ff
+ *
+ * Dark is the default; a light theme is derived below. Severity colours are
+ * used as chip BACKGROUNDS with dark text (never thin coloured text on dark),
+ * which keeps AA contrast. Fonts are self-hosted via @fontsource (no CDN).
+ */
+
+:root {
+  /* --- verbatim report.ts tokens (theme-independent source of truth) --- */
+  --mcpwn-bg: #0d1117;
+  --mcpwn-panel: #161b22;
+  --mcpwn-panel2: #0b0f14;
+  --mcpwn-code-bg: #010409;
+  --mcpwn-border: #30363d;
+  --mcpwn-text: #c9d1d9;
+  --mcpwn-muted: #8b949e;
+  --mcpwn-accent: #58a6ff;
+  --mcpwn-c2s: #56d4dd;
+  --mcpwn-s2c: #3fb950;
+  --mcpwn-crit: #f85149;
+  --mcpwn-high: #ff7b43;
+  --mcpwn-med: #d29922;
+  --mcpwn-low: #3fb950;
+  --mcpwn-info: #58a6ff;
+
+  --mcpwn-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --mcpwn-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
+  --sl-font: var(--mcpwn-sans);
+  --sl-font-mono: var(--mcpwn-mono);
+}
+
+/* --- Dark theme (default) — map the palette onto Starlight's variables --- */
+:root,
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #0b2a52;
+  --sl-color-accent: #1f6feb;
+  --sl-color-accent-high: #a5cdff;
+
+  --sl-color-white: #f0f6fc;
+  --sl-color-gray-1: #c9d1d9;
+  --sl-color-gray-2: #b1bac4;
+  --sl-color-gray-3: #8b949e;
+  --sl-color-gray-4: #6e7681;
+  --sl-color-gray-5: #30363d;
+  --sl-color-gray-6: #161b22;
+  --sl-color-gray-7: #0b0f14;
+  --sl-color-black: #0d1117;
+
+  --sl-color-text: var(--mcpwn-text);
+  --sl-color-text-accent: var(--mcpwn-accent);
+  --sl-color-bg: var(--mcpwn-bg);
+  --sl-color-bg-nav: var(--mcpwn-panel);
+  --sl-color-bg-sidebar: var(--mcpwn-panel);
+  --sl-color-bg-inline-code: var(--mcpwn-panel2);
+  --sl-color-hairline: var(--mcpwn-border);
+  --sl-color-hairline-light: var(--mcpwn-border);
+  --sl-color-hairline-shade: #21262d;
+}
+
+/* --- Light theme (derived; dark stays the default) --- */
+:root[data-theme="light"] {
+  --sl-color-accent-low: #cfe3ff;
+  --sl-color-accent: #0969da;
+  --sl-color-accent-high: #043a73;
+
+  --sl-color-white: #1f2328;
+  --sl-color-gray-1: #24292f;
+  --sl-color-gray-2: #424a53;
+  --sl-color-gray-3: #57606a;
+  --sl-color-gray-4: #6e7781;
+  --sl-color-gray-5: #d0d7de;
+  --sl-color-gray-6: #eaeef2;
+  --sl-color-gray-7: #f6f8fa;
+  --sl-color-black: #ffffff;
+
+  --sl-color-text: #1f2328;
+  --sl-color-text-accent: #0969da;
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #f6f8fa;
+  --sl-color-bg-sidebar: #f6f8fa;
+  --sl-color-bg-inline-code: #eaeef2;
+  --sl-color-hairline: #d0d7de;
+  --sl-color-hairline-light: #d8dee4;
+  --sl-color-hairline-shade: #d0d7de;
+}
+
+/* --- The mcpwn▮ wordmark in the site header ---------------------------- */
+/* title is the string "mcpwn"; a mono block cursor is appended after it. */
+.site-title {
+  font-family: var(--mcpwn-mono);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.site-title::after {
+  content: "\258C"; /* ▌ left half block, reads as a terminal cursor */
+  margin-left: 0.08em;
+  color: var(--mcpwn-accent);
+  animation: mcpwn-blink 1.1s steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-title::after {
+    animation: none;
+  }
+}
+@keyframes mcpwn-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* --- Severity chips (shared by threats/templates and the landing) ------ */
+.sev {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0.08rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #0d1117; /* dark text on a bright chip = AA */
+  font-family: var(--mcpwn-mono);
+}
+.sev-critical {
+  background: var(--mcpwn-crit);
+}
+.sev-high {
+  background: var(--mcpwn-high);
+}
+.sev-medium {
+  background: var(--mcpwn-med);
+}
+.sev-low {
+  background: var(--mcpwn-low);
+}
+.sev-info {
+  background: var(--mcpwn-info);
+}
+
+/* Visible focus everywhere (accessibility). */
+:where(a, button, summary, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--mcpwn-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}

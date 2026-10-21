@@ -48,6 +48,8 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "coverage": "c8 --include='src/engine/**' --include='src/core/**' --exclude='src/engine/intercept.ts' --exclude-after-remap --reporter=text --reporter=lcov npm test",
     "docs:api": "typedoc",
+    "docs:site:install": "npm --prefix docs-site install",
+    "docs:site": "typedoc --out docs-site/public/api && npm --prefix docs-site run build",
     "demo:server": "node examples/vulnerable-server.mjs",
     "demo:http": "node examples/vulnerable-server-http.mjs",
     "demo": "node examples/run-demo.mjs",

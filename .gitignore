@@ -7,6 +7,11 @@ coverage/
 .DS_Store
 mcpwn-session*.jsonl
 
+# docs site (Astro + Starlight) — node_modules/ and dist/ above already match at
+# any depth; these are the generated-only artifacts specific to the docs build.
+docs-site/public/api/
+docs-site/.astro/
+
 # local secrets
 .env
 

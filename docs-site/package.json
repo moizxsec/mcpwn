@@ -1,0 +1,20 @@
+{
+  "name": "mcpwn-docs-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Documentation website for mcpwn (Astro + Starlight). Not published; self-contained, keeps the root tool package's zero-runtime-deps invariant intact.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.36.0",
+    "@fontsource/inter": "^5.1.0",
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "astro": "^5.14.0",
+    "sharp": "^0.34.0"
+  }
+}

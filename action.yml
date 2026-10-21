@@ -1,8 +1,5 @@
 name: "mcpwn MCP security scan"
-description: >-
-  Scan an MCP server with mcpwn (self-driving, no agent in the loop), fail the
-  job on findings at/above a severity, and upload findings.sarif to the GitHub
-  Security tab (code scanning).
+description: "Scan an MCP server for prompt injection and tool poisoning, upload SARIF, and fail CI on findings."
 author: "moizxsec"
 branding:
   icon: "shield"

@@ -1,7 +1,10 @@
 name: Docs
 
-# Build the TypeDoc API reference and publish it to GitHub Pages. Independent of
-# the CI workflow — a docs failure never blocks a merge's build/test gate.
+# Build the documentation website (Astro + Starlight, with the TypeDoc API
+# reference published verbatim under /api) and deploy it to GitHub Pages.
+# Independent of the CI workflow — a docs failure never blocks a merge's
+# build/test gate. The site build lives entirely in docs-site/ and does not
+# touch the published npm package.
 on:
   push:
     branches: [main]
@@ -20,23 +23,25 @@ concurrency:
 
 jobs:
   build:
-    name: build typedoc
+    name: build docs site
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install (clean, from lockfile)
+      - name: Install root deps (clean, from lockfile)
         run: npm ci
-      - name: Build API reference (TypeDoc -> docs/api)
-        run: npm run docs:api
+      - name: Install docs-site deps (clean, from lockfile)
+        run: npm --prefix docs-site ci
+      - name: Build site (TypeDoc -> docs-site/public/api, then Astro -> docs-site/dist)
+        run: npm run docs:site
       - uses: actions/configure-pages@v5
         with:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/api
+          path: docs-site/dist
 
   deploy:
     name: deploy pages

@@ -1,0 +1,192 @@
+---
+// Generated gallery of the bundled mcpwn attack templates.
+//
+// At BUILD TIME, Vite statically globs the repo-root templates/*.json (one level
+// up out of docs-site), so a new pack dropped into templates/ shows up here
+// automatically with no edit to this file. Each card renders the `info` block;
+// a collapsible holds the raw rules[], syntax-highlighted.
+import { Code } from "astro:components";
+
+// Eager glob -> each value is the imported JSON module (default export = object).
+const modules = import.meta.glob("../../../templates/*.json", { eager: true });
+
+type Pack = {
+  id: string;
+  info: {
+    name: string;
+    author?: string;
+    severity: "critical" | "high" | "medium" | "low" | "info";
+    attackClass: string;
+    cwe?: string;
+    mcpVersion?: string;
+    description: string;
+    references?: string[];
+  };
+  rules: unknown[];
+};
+
+const packs: Pack[] = Object.entries(modules)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([, mod]) => ((mod as { default?: Pack }).default ?? (mod as Pack)));
+
+const GH = "https://github.com/moizxsec/mcpwn/blob/main/templates";
+---
+
+<div class="tpl-grid">
+  {
+    packs.map((p) => (
+      <article class="tpl-card">
+        <header class="tpl-head">
+          <h3 id={p.id} class="tpl-name">
+            {p.info.name}
+          </h3>
+          <span class={`sev sev-${p.info.severity}`}>{p.info.severity}</span>
+        </header>
+
+        <dl class="tpl-meta">
+          <div>
+            <dt>id</dt>
+            <dd>
+              <code>{p.id}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>class</dt>
+            <dd>
+              <code>{p.info.attackClass}</code>
+            </dd>
+          </div>
+          {p.info.cwe && (
+            <div>
+              <dt>cwe</dt>
+              <dd>
+                <code>{p.info.cwe}</code>
+              </dd>
+            </div>
+          )}
+          {p.info.mcpVersion && (
+            <div>
+              <dt>mcp</dt>
+              <dd>
+                <code>{p.info.mcpVersion}</code>
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        <p class="tpl-desc">{p.info.description}</p>
+
+        <p class="tpl-run">
+          Load it with <code>mcpwn --template {p.id}</code>
+        </p>
+
+        {p.info.references && p.info.references.length > 0 && (
+          <p class="tpl-refs">
+            <strong>References:</strong>{" "}
+            {p.info.references.map((r, i) => (
+              <>
+                {i > 0 && " · "}
+                <a href={r} target="_blank" rel="noopener noreferrer">
+                  {new URL(r).hostname}
+                </a>
+              </>
+            ))}
+          </p>
+        )}
+
+        <details class="tpl-rules">
+          <summary>
+            Raw rules[] ({p.rules.length}){" "}
+            <a class="tpl-src" href={`${GH}/${p.id}.json`} target="_blank" rel="noopener">
+              source ↗
+            </a>
+          </summary>
+          <Code code={JSON.stringify(p.rules, null, 2)} lang="json" theme="github-dark" />
+        </details>
+      </article>
+    ))
+  }
+</div>
+
+<style>
+  .tpl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .tpl-card {
+    border: 1px solid var(--mcpwn-border, #30363d);
+    background: var(--sl-color-bg-nav);
+    border-radius: 10px;
+    padding: 1rem 1.1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .tpl-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .tpl-name {
+    font-size: 1.02rem;
+    margin: 0;
+    line-height: 1.3;
+  }
+  .tpl-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    margin: 0.7rem 0 0.4rem;
+  }
+  .tpl-meta div {
+    display: flex;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
+  .tpl-meta dt {
+    color: var(--sl-color-gray-3);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+  }
+  .tpl-meta dd {
+    margin: 0;
+  }
+  .tpl-meta code,
+  .tpl-run code {
+    font-size: 0.8rem;
+  }
+  .tpl-desc {
+    margin: 0.4rem 0 0.6rem;
+    font-size: 0.92rem;
+    color: var(--sl-color-gray-2);
+  }
+  .tpl-run {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+  }
+  .tpl-refs {
+    margin: 0.2rem 0 0.6rem;
+    font-size: 0.8rem;
+    color: var(--sl-color-gray-3);
+  }
+  .tpl-rules {
+    margin-top: auto;
+  }
+  .tpl-rules summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .tpl-src {
+    font-weight: 400;
+    font-size: 0.8rem;
+    margin-left: 0.4rem;
+  }
+  .tpl-rules :global(pre) {
+    margin-top: 0.6rem;
+  }
+</style>

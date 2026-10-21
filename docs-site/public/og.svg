@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0d1117"/>
+  <rect x="1" y="1" width="1198" height="628" fill="none" stroke="#30363d" stroke-width="2"/>
+  <text x="80" y="300" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="130" font-weight="700" fill="#c9d1d9">mcpwn<tspan fill="#58a6ff">▌</tspan></text>
+  <text x="84" y="380" font-family="Inter, -apple-system, sans-serif" font-size="40" fill="#8b949e">Burp Suite for AI agents — intercept &amp; tamper MCP traffic</text>
+  <text x="84" y="560" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="28" fill="#56d4dd">npm i -g @moizxsec/mcpwn</text>
+  <text x="84" y="600" font-family="Inter, -apple-system, sans-serif" font-size="22" fill="#8b949e">Authorized testing only · 0 runtime dependencies</text>
+</svg>

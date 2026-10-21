@@ -39,9 +39,9 @@ export function formatSessionSummary(s: SessionSummary, findings: Finding[]): st
   return [
     "",
     "mcpwn session summary",
-    `  messages: ${s.messages} total — tampered=${s.tampered} dropped=${s.dropped}`,
+    `  messages: ${s.messages} total - tampered=${s.tampered} dropped=${s.dropped}`,
     `  tools:    ${tools}`,
-    `  findings: ${findings.length} total — ${sev}`,
+    `  findings: ${findings.length} total - ${sev}`,
     "",
   ];
 }
@@ -85,10 +85,10 @@ export class Logger {
   }
 
   banner(childCmd: string, ruleCount: number) {
-    this.write(bold(cyan("mcpwn")) + dim(" — MCP intercept & tamper proxy"));
+    this.write(bold(cyan("mcpwn")) + dim(" - MCP intercept & tamper proxy"));
     this.write(dim(`  proxying: ${childCmd}`));
     this.write(dim(`  rules:    ${ruleCount} active`));
-    this.write(dim("  authorized testing only — traffic stays local, no telemetry"));
+    this.write(dim("  authorized testing only - traffic stays local, no telemetry"));
     this.write("");
   }
 

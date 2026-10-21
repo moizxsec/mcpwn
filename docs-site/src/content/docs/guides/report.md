@@ -19,7 +19,7 @@ mcpwn advisory ./out -o ./advisories
 Turns a session log (the JSONL the proxy writes via `--log`) plus an optional
 findings dir into a **single zero-dependency HTML advisory**: header stats,
 findings by severity, side-by-side tamper diffs, and a tiny vanilla-JS severity
-filter. It is a **static file** — nothing listens, fetches, or executes. It
+filter. It is a **static file** - nothing listens, fetches, or executes. It
 opens offline and screenshots cleanly. Every byte of session/finding content is
 HTML-escaped (the content is literally the attacker-controlled traffic under
 test).
@@ -28,7 +28,7 @@ test).
 
 Turns a findings dir / `findings.json` into filled **CVSS v3.1 + CWE advisories**
 (GHSA-style markdown mirroring the
-[advisory template](/mcpwn/project/advisory-template/)) — one `.md` per finding,
+[advisory template](/mcpwn/project/advisory-template/)) - one `.md` per finding,
 a combined doc, or stdout:
 
 ```bash

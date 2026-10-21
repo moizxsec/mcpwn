@@ -70,8 +70,8 @@ jobs:
 
 | Input | Default | Purpose |
 | --- | --- | --- |
-| `server-command` | — | stdio server command to scan (or use `http-url`). |
-| `http-url` | — | remote Streamable HTTP server to scan instead. |
+| `server-command` | - | stdio server command to scan (or use `http-url`). |
+| `http-url` | - | remote Streamable HTTP server to scan instead. |
 | `fail-on` | `high` | fail the job at/above this severity. |
 | `fuzz` | `false` | enable active tool fuzzing. |
 | `findings-dir` | `mcpwn-findings` | output dir (SARIF is uploaded from here). |

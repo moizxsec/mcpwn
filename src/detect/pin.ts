@@ -206,7 +206,7 @@ export class PinDetector implements Detector {
         evidence,
         description:
           `A ${surface} drifted from the committed pin lock (${what}). The server's advertised ` +
-          "surface changed since it was pinned — a rug-pull signature: metadata the user " +
+          "surface changed since it was pinned - a rug-pull signature: metadata the user " +
           "approved is no longer what the agent will see.",
         remediation:
           "Treat the server as untrusted until the change is explained; re-run `mcpwn pin capture` only if the change is expected.",

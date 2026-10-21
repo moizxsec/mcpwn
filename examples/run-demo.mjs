@@ -103,7 +103,7 @@ async function main() {
       },
     });
     hr();
-    log("RESULT: Indirect prompt injection via tool result — DEMONSTRATED.");
+    log("RESULT: Indirect prompt injection via tool result - DEMONSTRATED.");
     log("        The agent exfiltrated a secret it should never have sent.");
   } else {
     log("AGENT: Nothing suspicious. (Run with the attack rule to see the exploit.)");

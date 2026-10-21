@@ -72,9 +72,9 @@ test("formatSessionSummary renders the tally + findings-by-severity", () => {
   const lines = formatSessionSummary(summary, findings);
   const text = lines.join("\n");
   assert.match(text, /mcpwn session summary/);
-  assert.match(text, /messages: 12 total — tampered=3 dropped=1/);
+  assert.match(text, /messages: 12 total - tampered=3 dropped=1/);
   assert.match(text, /tools:\s+read_file, send_email/);
-  assert.match(text, /findings: 3 total — critical=0 high=2 medium=1 low=0 info=0/);
+  assert.match(text, /findings: 3 total - critical=0 high=2 medium=1 low=0 info=0/);
 });
 
 test("formatSessionSummary handles the empty session gracefully", () => {

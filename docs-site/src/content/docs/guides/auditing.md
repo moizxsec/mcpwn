@@ -7,15 +7,15 @@ description: "A practical, repeatable workflow for finding real vulnerabilities 
 A practical playbook for finding real vulnerabilities in MCP servers using
 mcpwn. Each recipe maps a threat class to a concrete, repeatable workflow.
 
-> For the full catalogue of MCP attack classes — each with its CWE, the mcpwn
+> For the full catalogue of MCP attack classes - each with its CWE, the mcpwn
 > detector/template/[dvmcp](/mcpwn/dvmcp/) server that covers it,
-> and remediation — see the **[MCP threat taxonomy (docs/THREATS.md)](/mcpwn/threats/)**.
+> and remediation - see the **[MCP threat taxonomy (docs/THREATS.md)](/mcpwn/threats/)**.
 > Turn any findings dir into CVSS v3.1 + CWE advisories with
 > `mcpwn advisory <findings-dir> -o <dir>`.
 
 > **Authorized testing only.** Run servers you own or are explicitly allowed
 > to assess. The cleanest legal footing is to `npx`/run the open-source server
-> **locally on your own machine** — you own that execution — and disclose any
+> **locally on your own machine** - you own that execution - and disclose any
 > findings responsibly (see [ADVISORY_TEMPLATE.md](/mcpwn/project/advisory-template/)).
 
 ## Setup
@@ -34,8 +34,8 @@ response tells you the attack surface and the input schemas you can abuse.
 
 ## 1. Server-side input flaws (the highest-value bugs)
 
-These are real, exploitable CVEs — path traversal, SSRF, command injection,
-IDOR — reachable through `tools/call` **arguments**. mcpwn is the harness for
+These are real, exploitable CVEs - path traversal, SSRF, command injection,
+IDOR - reachable through `tools/call` **arguments**. mcpwn is the harness for
 crafting them; use `-i` to hold a `tools/call` and hand-edit `arguments`.
 
 ### Path traversal
@@ -54,10 +54,10 @@ a/../../../../etc/passwd               # defeats naive prefix checks
 
 **What a hardened server does (verified against `@modelcontextprotocol/server-filesystem`):**
 normalizes + resolves to absolute, checks `resolved.startsWith(allowedDir + sep)`
-(note the trailing separator — without it, `/allowed-evil` bypasses `/allowed`),
+(note the trailing separator - without it, `/allowed-evil` bypasses `/allowed`),
 rejects null bytes, and calls `fs.realpath` to resolve **symlinks** before
-access. If a server skips any of these — especially the trailing-separator
-check or the realpath/symlink step — it is likely vulnerable.
+access. If a server skips any of these - especially the trailing-separator
+check or the realpath/symlink step - it is likely vulnerable.
 
 ### SSRF
 
@@ -100,7 +100,7 @@ mcpwn -r examples/attack-inject.json -- npx -y <target>
 
 See `payloads/prompt-injection.txt` for a seed wordlist (or `mcpwn payloads show
 prompt-injection`). The finding
-is **"the agent obeys instructions found in tool output"** — demonstrate it by
+is **"the agent obeys instructions found in tool output"** - demonstrate it by
 getting the agent to call a sensitive tool it shouldn't.
 
 ## 3. Tool poisoning
@@ -126,7 +126,7 @@ the user's LLM.
 
 | Target | Version | Result |
 | --- | --- | --- |
-| `@modelcontextprotocol/server-filesystem` | 2026.1.14 | No traversal/symlink escape via the vectors above — validation uses trailing-separator prefix check + `fs.realpath`. Hardened. |
+| `@modelcontextprotocol/server-filesystem` | 2026.1.14 | No traversal/symlink escape via the vectors above - validation uses trailing-separator prefix check + `fs.realpath`. Hardened. |
 
-Contributions of further audits (positive or negative) are welcome — negative
+Contributions of further audits (positive or negative) are welcome - negative
 results are valuable too: they document what's already safe.

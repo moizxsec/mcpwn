@@ -13,17 +13,17 @@ The CWE + CVSS v3.1 scoring for each finding id lives in
 
 See also:
 
-- the **dvmcp scoreboard** — one intentionally-vulnerable server per class:
+- the **dvmcp scoreboard** - one intentionally-vulnerable server per class:
   [`examples/dvmcp/README.md`](../examples/dvmcp/README.md)
-- the **template gallery** — mcpwn-as-attacker rule-packs:
+- the **template gallery** - mcpwn-as-attacker rule-packs:
   [`templates/`](../templates) (`mcpwn templates list`)
-- the **detectors** — [`src/detect/linter.ts`](../src/detect/linter.ts),
+- the **detectors** - [`src/detect/linter.ts`](../src/detect/linter.ts),
   [`src/detect/baseline.ts`](../src/detect/baseline.ts),
   [`src/detect/pin.ts`](../src/detect/pin.ts),
   [`src/detect/taint.ts`](../src/detect/taint.ts)
-- the **guard firewall** — [`src/guard/guard.ts`](../src/guard/guard.ts)
-- the **auditing playbook** — [`docs/AUDITING.md`](./AUDITING.md)
-- the **advisory template** — [`docs/ADVISORY_TEMPLATE.md`](./ADVISORY_TEMPLATE.md)
+- the **guard firewall** - [`src/guard/guard.ts`](../src/guard/guard.ts)
+- the **auditing playbook** - [`docs/AUDITING.md`](./AUDITING.md)
+- the **advisory template** - [`docs/ADVISORY_TEMPLATE.md`](./ADVISORY_TEMPLATE.md)
 
 ## Turning findings into advisories
 
@@ -62,8 +62,8 @@ mcpwn advisory ./out                      # combined document to stdout
 ## 1. Indirect prompt injection (tool result / resource / prompt)
 
 **What:** attacker-controlled text that reaches the model *through data the agent
-ingests* — a `tools/call` result, a `resources/read` body, or a `prompts/get`
-message — rather than through the user's prompt. The model reads it as
+ingests* - a `tools/call` result, a `resources/read` body, or a `prompts/get`
+message - rather than through the user's prompt. The model reads it as
 instructions.
 
 **Real-world analogue:** stored XSS, but the "browser" is an LLM: the payload
@@ -88,7 +88,7 @@ require explicit confirmation for any action derived from tool output.
 
 **What:** a malicious server embeds instructions in a tool's **metadata** (its
 `description`, parameter docs, or annotations) so the model obeys them the moment
-it sees the tool list — no call required.
+it sees the tool list - no call required.
 
 **Real-world analogue:** a poisoned README / man page that tells whoever reads it
 to run a dangerous command.
@@ -109,7 +109,7 @@ descriptions to the model as directives; review tool manifests before approval.
 tool is named after a trusted client built-in (`bash`, `web_fetch`, …) so the
 agent routes a privileged call to the impostor.
 
-**Real-world analogue:** PATH hijacking / DLL search-order abuse — a look-alike
+**Real-world analogue:** PATH hijacking / DLL search-order abuse - a look-alike
 binary earlier in the resolution order wins.
 
 **mcpwn coverage:** `tool-shadowing` detector (duplicate names = high;
@@ -123,7 +123,7 @@ a server tool to shadow a client built-in.
 ## 4. Rug pull (tool-definition drift)
 
 **What:** a server serves a benign surface during approval, then silently mutates
-a description/schema or adds a privileged tool on a later listing — after the
+a description/schema or adds a privileged tool on a later listing - after the
 user has built trust.
 
 **Real-world analogue:** a browser extension that ships clean, then pushes a
@@ -145,10 +145,10 @@ dvmcp server: `examples/dvmcp/rug-pull.mjs`.
 ## 5. Sampling abuse
 
 **What:** a server issues a `sampling/createMessage` request, asking the client
-to run an LLM completion on its behalf with a server-authored prompt — letting
+to run an LLM completion on its behalf with a server-authored prompt - letting
 the server drive the user's model directly.
 
-**Real-world analogue:** SSRF for LLMs — the server makes *your* model perform
+**Real-world analogue:** SSRF for LLMs - the server makes *your* model perform
 work (and spend tokens) under its direction.
 
 **mcpwn coverage:** `sampling-abuse` detector records every server-initiated
@@ -165,7 +165,7 @@ show the server-supplied prompt; rate-limit and scope it.
 ## 6. Elicitation phishing
 
 **What:** a server uses MCP *elicitation* (a server-initiated request for user
-input) to phish — crafting a convincing prompt that coaxes the user into
+input) to phish - crafting a convincing prompt that coaxes the user into
 revealing a secret or approving an action.
 
 **Real-world analogue:** a phishing dialog that impersonates a trusted app's
@@ -183,8 +183,8 @@ in the UI; never auto-answer; never let a server request credentials.
 
 ## 7. Confused deputy / cross-server
 
-**What:** a server induces the agent to use its standing authority — or data from
-one server — to act against *another* server or resource the server itself could
+**What:** a server induces the agent to use its standing authority - or data from
+one server - to act against *another* server or resource the server itself could
 not reach.
 
 **Real-world analogue:** the classic confused-deputy (CSRF, SSRF): a less-
@@ -194,7 +194,7 @@ privileged actor tricks a more-privileged one into misusing its rights.
 flowing into a privileged call (#14); `tool-shadowing` flags the impersonation
 path. A full multi-server correlation view is on the roadmap.
 
-**CWE:** CWE-441 (Unintended Proxy or Intermediary — "Confused Deputy").
+**CWE:** CWE-441 (Unintended Proxy or Intermediary - "Confused Deputy").
 
 **Remediation:** scope each server's authority narrowly; don't let output from
 one server auto-drive calls to another; require per-action confirmation.
@@ -298,7 +298,7 @@ model (ASCII smuggling / hidden prompt injection).
 plagiarism-evasion.
 
 **mcpwn coverage:** `invisible-unicode` detector (high when Unicode-Tag chars are
-present — no legitimate use — else medium); the guard `sanitize` action strips
+present - no legitimate use - else medium); the guard `sanitize` action strips
 them before the agent sees them.
 
 **CWE:** CWE-1427 (hidden-instruction prompt injection); see also CWE-150
@@ -311,7 +311,7 @@ server-supplied text before it reaches the model.
 
 **What:** the kill chain that makes indirect injection *real*: text that
 originated from an untrusted tool result / resource later reappears inside a
-privileged `tools/call` argument — attacker content from a source message is now
+privileged `tools/call` argument - attacker content from a source message is now
 steering a sink call.
 
 **Real-world analogue:** a taint flow from an untrusted source to a dangerous
@@ -349,6 +349,6 @@ behind confirmation regardless of the hint.
 
 ## Contributing
 
-Found a class mcpwn should cover, or a better CWE/remediation? Open a PR — add the
+Found a class mcpwn should cover, or a better CWE/remediation? Open a PR - add the
 class here, wire a detector or template, and (ideally) a dvmcp server so the
 scoreboard can grade it. See [CONTRIBUTING.md](../CONTRIBUTING.md).

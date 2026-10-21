@@ -43,7 +43,7 @@
   --sl-font-mono: var(--mcpwn-mono);
 }
 
-/* --- Dark theme (default) — map the palette onto Starlight's variables --- */
+/* --- Dark theme (default) - map the palette onto Starlight's variables --- */
 :root,
 :root[data-theme="dark"] {
   --sl-color-accent-low: #0b2a52;

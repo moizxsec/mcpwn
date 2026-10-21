@@ -1,6 +1,6 @@
 ---
 title: Install
-description: Install mcpwn globally with npm, run it ad-hoc with npx, or build the Docker image. Requires Node >= 18 — zero other runtime dependencies.
+description: Install mcpwn globally with npm, run it ad-hoc with npx, or build the Docker image. Requires Node >= 18 - zero other runtime dependencies.
 ---
 
 ```bash

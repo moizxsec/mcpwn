@@ -23,7 +23,7 @@ transparency/never-block-the-wire invariant intact.
   byte-for-byte, relays batches and compressed/opaque bodies unchanged, and
   forwards the original bytes on any failure. (`--mode streamable|sse|auto`.)
   Interactive `-i` is intentionally disabled for HTTP.
-- **Argument tampering** for `client->server` `tools/call` — new rule actions
+- **Argument tampering** for `client->server` `tools/call` - new rule actions
   `setArg`, `rewriteArgs`, and `fuzzArgs`, backed by a tiny zero-dep JSON-path
   helper (`a.b[0].c`). `fuzzArgs` cycles one payload per matching call.
 - **Payload library**: bundled `prompt-injection`, `sqli`, `path-traversal`,

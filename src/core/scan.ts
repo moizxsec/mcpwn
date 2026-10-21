@@ -232,7 +232,7 @@ export function parseScanArgs(argv: string[]): ScanArgs {
       default:
         if (a.startsWith("-")) {
           throw new ScanArgError(
-            `unknown option "${a}" — put the server command (and its flags) after "--"`
+            `unknown option "${a}" - put the server command (and its flags) after "--"`
           );
         }
         // First bare token (no "--" required) starts the stdio server command.
@@ -661,7 +661,7 @@ async function fuzzTools(
   if (libraries.length === 0) return;
   for (const tool of tools) {
     if (Date.now() > deadline) {
-      logger.info("fuzz budget exhausted — stopping");
+      logger.info("fuzz budget exhausted - stopping");
       return;
     }
     const name = tool?.name;
@@ -711,7 +711,7 @@ function printSummary(counts: SurfaceCounts, items: Finding[], args: ScanArgs): 
     "",
     "mcpwn scan summary",
     `  surfaces: tools=${counts.tools} resources=${counts.resources} prompts=${counts.prompts}`,
-    `  findings: ${items.length} total — critical=${bySev.critical} high=${bySev.high} ` +
+    `  findings: ${items.length} total - critical=${bySev.critical} high=${bySev.high} ` +
       `medium=${bySev.medium} low=${bySev.low} info=${bySev.info}`,
     `  fail-on:  ${args.failOn} (exit nonzero if any finding is at or above this severity)`,
     "",
@@ -748,7 +748,7 @@ export async function runScan(argv: string[]): Promise<number> {
   }
   if (!args.http && !args.command) {
     process.stderr.write(
-      'mcpwn scan: missing target — give --http <url> or a server command after "--"\n'
+      'mcpwn scan: missing target - give --http <url> or a server command after "--"\n'
     );
     return 2;
   }
@@ -782,7 +782,7 @@ export async function runScan(argv: string[]): Promise<number> {
       return 2;
     }
     logger.info(
-      `detector plugin loaded: ${d.name} <- ${p} (runs local code — trusted sources only)`
+      `detector plugin loaded: ${d.name} <- ${p} (runs local code - trusted sources only)`
     );
     detectors.push(d);
   }
@@ -830,7 +830,7 @@ export async function runScan(argv: string[]): Promise<number> {
       throw new Error("server did not complete the initialize handshake");
     }
     client.notify("notifications/initialized", {});
-    logger.info(`handshake ok — capabilities: ${capabilityList(init.json?.result?.capabilities)}`);
+    logger.info(`handshake ok - capabilities: ${capabilityList(init.json?.result?.capabilities)}`);
 
     // 2) Enumerate every surface (paginated, error-tolerant).
     const tools = await enumerate(client, "tools/list", "tools", args.timeoutMs, deadline);

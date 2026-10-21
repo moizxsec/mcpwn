@@ -1,6 +1,6 @@
 ---
 title: Tamper rules
-description: The JSON tamper-rule format — direction, method, and action — plus the full action catalogue and the server-side argument fuzzer.
+description: The JSON tamper-rule format - direction, method, and action - plus the full action catalogue and the server-side argument fuzzer.
 ---
 
 Rules are plain JSON, loadable from any file so you can build and share payload
@@ -57,7 +57,7 @@ mcpwn hand-validates rule files and suggests "did you mean …?" on a mistyped
 ## Argument tampering (the server-side input fuzzer)
 
 `setArg`, `rewriteArgs`, and `fuzzArgs` apply **only to `client->server`
-`tools/call`** requests — they rewrite the *arguments the agent sends into a
+`tools/call`** requests - they rewrite the *arguments the agent sends into a
 tool*, turning mcpwn into a live harness for path-traversal, SSRF, and injection
 testing of the server itself. Optionally scope any of them to one tool with
 `"tool": "<name>"`.
@@ -85,4 +85,4 @@ Bundled payload libraries (`prompt-injection`, `sqli`, `path-traversal`, `ssrf`,
 `mcpwn payloads list` / `mcpwn payloads show <name>`.
 
 Ready-made rule-packs for common attack classes live in the
-[template gallery](/mcpwn/templates/) — load one with `--template <id>`.
+[template gallery](/mcpwn/templates/) - load one with `--template <id>`.

@@ -1,6 +1,6 @@
 ---
 title: Intercept proxy
-description: The live proxy — passive X-ray, the interactive Repeater loop, the read-only detectors, and interception scoping.
+description: The live proxy - passive X-ray, the interactive Repeater loop, the read-only detectors, and interception scoping.
 ---
 
 mcpwn wraps a **stdio** MCP server: the host launches mcpwn, mcpwn launches the
@@ -24,8 +24,8 @@ mcpwn -l session.jsonl -- node ./my-server.js
 ## Interactive intercept (the Repeater loop)
 
 With `-i`, mcpwn holds each message and waits for you on the controlling
-terminal (keyboard input comes from the console directly — `/dev/tty` on POSIX,
-`CONIN$`/`CONOUT$` on Windows — so it never collides with the MCP channel on
+terminal (keyboard input comes from the console directly - `/dev/tty` on POSIX,
+`CONIN$`/`CONOUT$` on Windows - so it never collides with the MCP channel on
 stdin/stdout):
 
 ```text
@@ -59,16 +59,16 @@ with no tty, it logs a notice and falls back to auto-forward (rules still apply)
 
 ## Detection & reporting
 
-Passive detectors run **read-only** alongside the proxy — they never change
+Passive detectors run **read-only** alongside the proxy - they never change
 what's forwarded, they only record findings.
 
 | Flag | Description |
 | --- | --- |
 | `--findings-out <dir>` | On exit, write `findings.json` + `findings.md` + `findings.sarif` (also enables the passive secret/poisoning linters). |
-| `--baseline <file>` | Diff each `tools/list` against a captured baseline — **rug-pull detection** (tool set / schema / description drift mid-session). |
+| `--baseline <file>` | Diff each `tools/list` against a captured baseline - **rug-pull detection** (tool set / schema / description drift mid-session). |
 | `--baseline-capture <file>` | Capture the first `tools/list` to `<file>` inline while proxying. |
-| `--pin <file>` | Diff the live tool/resource/prompt surface against a committed `mcpwn.lock` — **cross-session rug-pull pinning**; any silent drift is a **HIGH** finding. Capture with `mcpwn pin capture`. |
-| `--taint` | **Provenance tainting** — flag the injection→action kill chain: untrusted server output (a tool result / resource) that is later reused inside a `tools/call` argument (**HIGH**). Read-only, opt-in. |
+| `--pin <file>` | Diff the live tool/resource/prompt surface against a committed `mcpwn.lock` - **cross-session rug-pull pinning**; any silent drift is a **HIGH** finding. Capture with `mcpwn pin capture`. |
+| `--taint` | **Provenance tainting** - flag the injection→action kill chain: untrusted server output (a tool result / resource) that is later reused inside a `tools/call` argument (**HIGH**). Read-only, opt-in. |
 | `--redact` | Mask built-in secret patterns (API keys, tokens, …) in the stderr log + JSONL. |
 | `--redact-file <file>` | Add redaction patterns, one `label=regex` per line. |
 
@@ -88,9 +88,9 @@ tamper stays surgical).
 
 ## Batched messages
 
-JSON-RPC 2.0 allows a **batch** — an array of messages on a single line. mcpwn
+JSON-RPC 2.0 allows a **batch** - an array of messages on a single line. mcpwn
 does **not** classify, correlate, or tamper batch elements individually: a batch
 is relayed **opaquely** (logged with `kind: "unknown"`, forwarded byte-for-byte),
-so rules do not currently apply inside a batch. This is deliberate — batches are
+so rules do not currently apply inside a batch. This is deliberate - batches are
 rare in MCP and were removed in the 2025-06-18 spec revision. If you need to
 tamper a batched server, split it upstream or open an issue.

@@ -1,6 +1,6 @@
 ---
 title: Config file
-description: Commit a baseline invocation instead of retyping flags — mcpwn auto-loads an mcpwn.config.json next to your server. Precedence is defaults < config < CLI flags.
+description: Commit a baseline invocation instead of retyping flags - mcpwn auto-loads an mcpwn.config.json next to your server. Precedence is defaults < config < CLI flags.
 ---
 
 Commit a baseline invocation instead of retyping flags. Drop an

@@ -1,6 +1,6 @@
 ---
 title: Wrap & init
-description: Let mcpwn edit your MCP client's config to route every stdio server through the proxy — idempotent, backed up, and reversible. Or onboard in one step with init.
+description: Let mcpwn edit your MCP client's config to route every stdio server through the proxy - idempotent, backed up, and reversible. Or onboard in one step with init.
 ---
 
 ## One-step onboarding
@@ -15,7 +15,7 @@ VS Code, Windsurf), offers to route one through mcpwn, and drops a starter
 
 ## Wire it into your MCP client
 
-Let mcpwn edit the client's config for you — it finds the file (per-OS standard
+Let mcpwn edit the client's config for you - it finds the file (per-OS standard
 path), **backs it up**, and routes every configured stdio server through mcpwn:
 
 ```bash

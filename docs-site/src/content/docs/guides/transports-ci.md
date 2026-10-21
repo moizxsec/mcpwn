@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: moizxsec/mcpwn@main  # pin a release tag in practice
+      - uses: moizxsec/mcpwn@v1  # or pin an exact release, e.g. @v0.3.0
         with:
           server-command: "node ./my-server.js"   # or: http-url: https://…/mcp
           fail-on: high

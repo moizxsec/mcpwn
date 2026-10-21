@@ -1,4 +1,4 @@
-# Security advisory — <SERVER NAME> <VERSION>
+# Security advisory - <SERVER NAME> <VERSION>
 
 > Fill this in for a vulnerability you found with mcpwn, then follow the
 > disclosure process in [../SECURITY.md](../SECURITY.md). Report privately to
@@ -50,9 +50,9 @@ The concrete fix (e.g. "resolve with `fs.realpath` and check
 
 ## Disclosure timeline
 
-- YYYY-MM-DD — reported privately to maintainer
-- YYYY-MM-DD — fix released / 90-day window elapsed
-- YYYY-MM-DD — public disclosure
+- YYYY-MM-DD - reported privately to maintainer
+- YYYY-MM-DD - fix released / 90-day window elapsed
+- YYYY-MM-DD - public disclosure
 
 ## Credit
 

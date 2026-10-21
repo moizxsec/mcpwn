@@ -78,7 +78,7 @@ export function parseReplayArgs(argv: string[]): ReplayArgs {
       default:
         if (a.startsWith("-")) {
           throw new ReplayArgError(
-            `unknown option "${a}" — put the server command (and its flags) after "--"`
+            `unknown option "${a}" - put the server command (and its flags) after "--"`
           );
         }
         if (out.sessionFile === undefined) {

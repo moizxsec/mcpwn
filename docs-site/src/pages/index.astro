@@ -23,7 +23,7 @@ const INSTALL = "npm i -g @moizxsec/mcpwn";
 const features = [
   {
     title: "Intercept",
-    body: "Sit in the middle of a live MCP session — hold each JSON-RPC message and forward, drop, edit, or tamper it. The Repeater loop for AI agents.",
+    body: "Sit in the middle of a live MCP session: hold each JSON-RPC message and forward, drop, edit, or tamper it. The Repeater loop for AI agents.",
     href: url("guides/proxy/"),
   },
   {
@@ -33,7 +33,7 @@ const features = [
   },
   {
     title: "Guard",
-    body: "Point it defensively and it's a firewall on the agent↔server channel — allow / warn / sanitize / block, plus rug-pull pinning and provenance tainting.",
+    body: "Point it defensively and it's a firewall on the agent↔server channel: allow / warn / sanitize / block, plus rug-pull pinning and provenance tainting.",
     href: url("guides/guard/"),
   },
   {
@@ -43,12 +43,12 @@ const features = [
   },
   {
     title: "DVMCP",
-    body: "Damn-Vulnerable MCP — one intentionally-broken server per attack class, plus a CI-gradeable scoreboard that lights up the scanner and detectors.",
+    body: "Damn-Vulnerable MCP: one intentionally-broken server per attack class, plus a CI-gradeable scoreboard that lights up the scanner and detectors.",
     href: url("dvmcp/"),
   },
   {
     title: "Advisory",
-    body: "Turn findings into a self-contained HTML advisory and filled CVSS v3.1 + CWE GHSA-style markdown — the artifacts you drop into a write-up.",
+    body: "Turn findings into a self-contained HTML advisory and filled CVSS v3.1 + CWE GHSA-style markdown, the artifacts you drop into a write-up.",
     href: url("guides/report/"),
   },
 ];
@@ -108,13 +108,13 @@ const badges = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>mcpwn — Burp Suite for AI agents</title>
+    <title>mcpwn - Burp Suite for AI agents</title>
     <meta
       name="description"
-      content="Intercept & tamper proxy for MCP traffic — X-ray and tamper the JSON-RPC between an AI agent and its MCP servers. Authorized testing only."
+      content="Intercept & tamper proxy for MCP traffic: X-ray and tamper the JSON-RPC between an AI agent and its MCP servers. Authorized testing only."
     />
     <link rel="icon" href={url("favicon.svg")} type="image/svg+xml" />
-    <meta property="og:title" content="mcpwn — Burp Suite for AI agents" />
+    <meta property="og:title" content="mcpwn - Burp Suite for AI agents" />
     <meta
       property="og:description"
       content="X-ray and tamper the traffic between an AI agent and its MCP servers."
@@ -146,7 +146,7 @@ const badges = [
           <p class="lead">
             X-ray and tamper the traffic between an AI agent and its MCP servers.
             An intercepting man-in-the-middle proxy for the Model Context
-            Protocol — watch every JSON-RPC message, and rewrite the
+            Protocol - watch every JSON-RPC message, and rewrite the
             <strong>tool results the server sends back to the agent</strong>.
             Burp Suite, but for AI agents.
           </p>
@@ -180,7 +180,7 @@ const badges = [
           </ul>
 
           <p class="warn" role="note">
-            ⚠ Authorized testing only — use it on agents and servers you own or
+            ⚠ Authorized testing only - use it on agents and servers you own or
             are explicitly authorized to assess.
           </p>
         </div>
@@ -193,12 +193,12 @@ const badges = [
               src={demoGif.src}
               width={demoGif.width}
               height={demoGif.height}
-              alt="mcpwn tampers a tool result in flight; the agent obeys the injected instruction and exfiltrates a secret"
+              alt="mcpwn scans a vulnerable MCP server: it enumerates the tools, fuzzes them, and reports findings by severity with CWE mappings"
               loading="lazy"
               decoding="async"
             />
           </picture>
-          <figcaption>tamper a tool result in flight → the agent obeys → a secret leaks</figcaption>
+          <figcaption>scan a server → fuzz every tool → findings ranked by severity, with CWEs</figcaption>
         </figure>
       </section>
 
@@ -273,7 +273,7 @@ const badges = [
 
     <footer class="foot">
       <p>
-        <span class="wordmark">mcpwn</span> — authorized testing only. MIT ©
+        <span class="wordmark">mcpwn</span> - authorized testing only. MIT ©
         moizxsec.
       </p>
       <p class="foot-links">
@@ -297,7 +297,7 @@ const badges = [
               setTimeout(() => (label.textContent = prev), 1500);
             }
           } catch {
-            /* clipboard blocked — the command is still selectable */
+            /* clipboard blocked - the command is still selectable */
           }
         });
       }

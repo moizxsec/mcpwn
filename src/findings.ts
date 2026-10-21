@@ -95,7 +95,7 @@ export function writeMarkdown(findings: Finding[]): string {
   const lines: string[] = [];
   lines.push("# mcpwn findings");
   lines.push("");
-  lines.push(`Generated ${new Date().toISOString()} — ${sorted.length} finding(s).`);
+  lines.push(`Generated ${new Date().toISOString()} - ${sorted.length} finding(s).`);
   lines.push("");
 
   if (sorted.length === 0) {

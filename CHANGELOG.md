@@ -6,8 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.0] - 2026-10-21
 
-Turns mcpwn from a tamper proxy into a full MCP security platform — offensive
-and defensive — while keeping **zero runtime dependencies** and every
+Turns mcpwn from a tamper proxy into a full MCP security platform - offensive
+and defensive - while keeping **zero runtime dependencies** and every
 never-block-the-wire / detectors-read-only / out-of-scope-untouched invariant
 intact.
 
@@ -20,10 +20,10 @@ intact.
 - **Four passive detectors**: invisible/zero-width unicode, embedded/exfil-URL,
   tool-shadowing, and annotation-mismatch; the secret and injection linters now
   scan all agent-bound text (results, resources, prompt/sampling messages).
-- **`mcpwn scan`** — self-driving active scanner (no agent in the loop):
+- **`mcpwn scan`** - self-driving active scanner (no agent in the loop):
   handshake, enumerate tools/resources/prompts, run detectors, optional
   schema-aware `--fuzz`, findings + CI exit code; stdio and `--http`.
-- **`mcpwn report`** — single self-contained, XSS-safe HTML advisory with
+- **`mcpwn report`** - single self-contained, XSS-safe HTML advisory with
   side-by-side original-vs-tampered diffs.
 - **Plugins + templates**: `--detector` / `--rule-plugin` loaders and a
   nuclei-style `templates/` gallery (`templates list|show|lint`, `--template`).
@@ -36,9 +36,9 @@ intact.
   **provenance taint** (`--taint`, injection→action kill-chain).
 - **`mcpwn diff`** (differential replay vs a golden session) and
   **`mcpwn conformance`** (MCP spec checks; violations become findings).
-- **`mcpwn eval`** — agent-susceptibility harness (mock + command adapters;
+- **`mcpwn eval`** - agent-susceptibility harness (mock + command adapters;
   deterministic scorecard; mcpwn never reads API keys).
-- **`mcpwn advisory`** — GHSA-style CVSS v3.1 + CWE advisories; `docs/THREATS.md`
+- **`mcpwn advisory`** - GHSA-style CVSS v3.1 + CWE advisories; `docs/THREATS.md`
   threat taxonomy; CWE/CVSS enriched into SARIF + the HTML report.
 - **Distribution**: `wrap`/`unwrap` (claude-desktop/cursor/cline/vscode/
   windsurf), `init` wizard, shell completions, man page, Dockerfile, a composite
@@ -63,7 +63,7 @@ transparency/never-block-the-wire invariant intact.
   byte-for-byte, relays batches and compressed/opaque bodies unchanged, and
   forwards the original bytes on any failure. (`--mode streamable|sse|auto`.)
   Interactive `-i` is intentionally disabled for HTTP.
-- **Argument tampering** for `client->server` `tools/call` — new rule actions
+- **Argument tampering** for `client->server` `tools/call` - new rule actions
   `setArg`, `rewriteArgs`, and `fuzzArgs`, backed by a tiny zero-dep JSON-path
   helper (`a.b[0].c`). `fuzzArgs` cycles one payload per matching call.
 - **Payload library**: bundled `prompt-injection`, `sqli`, `path-traversal`,

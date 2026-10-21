@@ -125,7 +125,7 @@ export class BaselineDetector implements Detector {
           method: "tools/list",
           tool: name,
           description:
-            "A tool not present in the trusted baseline appeared in tools/list — a server may be expanding its capabilities after the client built trust (rug pull).",
+            "A tool not present in the trusted baseline appeared in tools/list - a server may be expanding its capabilities after the client built trust (rug pull).",
           remediation:
             "Re-review the server's tool set and re-capture the baseline only if the change is expected.",
           ts: flow.ts,
@@ -141,7 +141,7 @@ export class BaselineDetector implements Detector {
           method: "tools/list",
           tool: name,
           description:
-            "A tool's input schema changed after the baseline was captured — new or altered parameters can silently redirect how the agent calls the tool.",
+            "A tool's input schema changed after the baseline was captured - new or altered parameters can silently redirect how the agent calls the tool.",
           remediation:
             "Treat the server as untrusted until the schema change is explained; re-capture the baseline if intended.",
           ts: flow.ts,
@@ -156,7 +156,7 @@ export class BaselineDetector implements Detector {
           method: "tools/list",
           tool: name,
           description:
-            "A tool's description changed after the baseline was captured — descriptions steer the agent and are a classic tool-poisoning surface.",
+            "A tool's description changed after the baseline was captured - descriptions steer the agent and are a classic tool-poisoning surface.",
           remediation:
             "Review the new description for injected instructions; re-capture the baseline if intended.",
           ts: flow.ts,

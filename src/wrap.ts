@@ -480,13 +480,13 @@ export function resolveTarget(args: WrapCliArgs): {
       path = spec.resolve(process.env, process.platform);
       if (!path) {
         throw new WrapError(
-          `could not resolve the ${spec.label} config path on this platform — pass --config-path <file>`
+          `could not resolve the ${spec.label} config path on this platform - pass --config-path <file>`
         );
       }
     }
   }
   if (!path) {
-    throw new WrapError("missing target — pass --client <id> and/or --config-path <file>");
+    throw new WrapError("missing target - pass --client <id> and/or --config-path <file>");
   }
   return { serversKey, path, label };
 }
@@ -532,7 +532,7 @@ export async function runWrap(argv: string[]): Promise<number> {
   }
 
   if (args.dryRun) {
-    process.stdout.write(`# dry-run — ${target.label} (${target.path})\n`);
+    process.stdout.write(`# dry-run - ${target.label} (${target.path})\n`);
     if (res.changed.length) {
       process.stdout.write(`# would wrap: ${res.changed.join(", ")}\n`);
     } else {
@@ -544,7 +544,7 @@ export async function runWrap(argv: string[]): Promise<number> {
 
   if (!res.changed.length) {
     process.stderr.write(
-      `mcpwn wrap: already wrapped — nothing to do (${target.path})\n` +
+      `mcpwn wrap: already wrapped - nothing to do (${target.path})\n` +
         (res.skipped.length ? `  skipped: ${res.skipped.join(", ")}\n` : "")
     );
     return 0;
@@ -592,7 +592,7 @@ export async function runUnwrap(argv: string[]): Promise<number> {
   }
 
   if (args.dryRun) {
-    process.stdout.write(`# dry-run — ${target.label} (${target.path})\n`);
+    process.stdout.write(`# dry-run - ${target.label} (${target.path})\n`);
     process.stdout.write(
       res.restoredFromBackup
         ? `# would restore from backup ${res.backupPath}\n`
@@ -610,7 +610,7 @@ export async function runUnwrap(argv: string[]): Promise<number> {
     return 0;
   }
   if (!res.changed.length) {
-    process.stderr.write(`mcpwn unwrap: nothing wrapped — nothing to do (${target.path})\n`);
+    process.stderr.write(`mcpwn unwrap: nothing wrapped - nothing to do (${target.path})\n`);
     return 0;
   }
   process.stderr.write(

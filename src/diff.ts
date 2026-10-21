@@ -124,7 +124,7 @@ export function parseDiffArgs(argv: string[]): DiffArgs {
       default:
         if (a.startsWith("-")) {
           throw new DiffArgError(
-            `unknown option "${a}" — put the server command (and its flags) after "--"`
+            `unknown option "${a}" - put the server command (and its flags) after "--"`
           );
         }
         if (out.goldenFile === undefined) {
@@ -374,7 +374,7 @@ export async function runDiff(argv: string[]): Promise<number> {
   }
   if (!args.http && !args.command) {
     process.stderr.write(
-      'mcpwn diff: missing target — give --http <url> or a server command after "--"\n'
+      'mcpwn diff: missing target - give --http <url> or a server command after "--"\n'
     );
     return 2;
   }
@@ -497,7 +497,7 @@ export async function runDiff(argv: string[]): Promise<number> {
   w.write("\n");
 
   if (changes.length === 0 && driftFindings.length === 0) {
-    w.write("DRIFT: none — live responses match the golden session.\n");
+    w.write("DRIFT: none - live responses match the golden session.\n");
   } else {
     w.write(`DRIFT (${driftFindings.length} change(s))\n`);
     for (const f of bySeverity(driftFindings)) {
@@ -512,7 +512,7 @@ export async function runDiff(argv: string[]): Promise<number> {
   } else {
     w.write(`NEW INJECTION SURFACES (${newFindings.length})\n`);
     for (const f of bySeverity(newFindings)) {
-      w.write(`  [${f.severity}] ${f.id} — ${f.title}\n`);
+      w.write(`  [${f.severity}] ${f.id} - ${f.title}\n`);
       if (f.evidence) w.write(`      ${truncate(f.evidence, 200)}\n`);
     }
   }

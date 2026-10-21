@@ -30,7 +30,7 @@ npm run docs:api     # typedoc -> docs/api/ (git-ignored, build-only)
 npm run demo         # end-to-end inject -> exfil demo (no network, no API key)
 ```
 
-All dependencies are **devDependencies** — mcpwn itself has **zero runtime
+All dependencies are **devDependencies** - mcpwn itself has **zero runtime
 dependencies** (Node built-ins only). Please keep it that way: validation is
 hand-rolled, and transports use `node:http`/`node:crypto` directly.
 
@@ -60,7 +60,7 @@ The codebase is small and layered:
 ### Adding a new rule kind
 
 A tamper action (`RuleAction`) is a discriminated union keyed on `kind`. To add
-one — say `truncateResult`:
+one - say `truncateResult`:
 
 1. **Extend the union.** Add the new variant to `RuleAction` in
    [`src/types.ts`](https://github.com/moizxsec/mcpwn/blob/main/src/types.ts), e.g.
@@ -68,7 +68,7 @@ one — say `truncateResult`:
 2. **Handle it in `applyAction`.** In [`src/engine/rules.ts`](https://github.com/moizxsec/mcpwn/blob/main/src/engine/rules.ts),
    add a `case "truncateResult":` **before the `default:` throw**. Mutate the
    cloned `json` in place and return `true` when you changed it, `false` when the
-   action did not apply. The `default:` branch must stay — an unknown kind has to
+   action did not apply. The `default:` branch must stay - an unknown kind has to
    *fail loud* so the per-rule try/catch logs it and forwards untampered
    (Invariant: never block the wire).
 3. **Add a schema + validate branch.** Register the kind in
@@ -108,7 +108,7 @@ in `MessagePipeline`, so a new transport inherits them for free:
    failure. Detectors are read-only and must never mutate the flow or throw into
    the pipeline.
 3. **Transparent when idle.** With no rules/detectors/scope, traffic passes
-   through unchanged in content, order, and framing — on *both* transports.
+   through unchanged in content, order, and framing - on *both* transports.
 4. **Protocol correctness.** Preserve `Mcp-Session-Id`/`Last-Event-ID` and SSE
    `event:`/`id:` framing on HTTP; newline framing on stdio; correlation keys
    intact in both directions.
@@ -134,7 +134,7 @@ in `MessagePipeline`, so a new transport inherits them for free:
 3. Bump `version` in `package.json` (SemVer).
 4. Add a dated section to [`CHANGELOG.md`](/mcpwn/project/changelog/) (Keep a Changelog
    format) summarising the release.
-5. Verify the publish tarball contents: `npm pack --dry-run` — confirm `dist/`,
+5. Verify the publish tarball contents: `npm pack --dry-run` - confirm `dist/`,
    `schema/`, `payloads/`, `examples/`, and `README.md` are included and nothing
    sensitive leaks. (`prepublishOnly` runs `npm run build` automatically.)
 6. Tag and publish: `git tag vX.Y.Z` then `npm publish` (scope is published with

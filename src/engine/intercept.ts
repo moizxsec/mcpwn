@@ -72,7 +72,7 @@ export class InterceptController {
       dim(
         "intercept: " +
           (this.holding ? "ON (holding messages)" : "OFF") +
-          "  — keys while held: [f]orward [d]rop [e]dit [t]amper [F]orward-all [q]uit\n"
+          "  - keys while held: [f]orward [d]rop [e]dit [t]amper [F]orward-all [q]uit\n"
       )
     );
   }
@@ -140,7 +140,7 @@ export class InterceptController {
         if (k === "" || k === "q") {
           // Ctrl-C or quit
           cleanup();
-          this.out(dim("\nquit — tearing down.\n"));
+          this.out(dim("\nquit - tearing down.\n"));
           process.kill(process.pid, "SIGINT");
           return;
         }
@@ -164,7 +164,7 @@ export class InterceptController {
         } else if (k === "e") {
           const edited = this.openEditor(current);
           if (edited === undefined) {
-            this.out(red("invalid JSON — edit discarded\n"));
+            this.out(red("invalid JSON - edit discarded\n"));
           } else {
             current = edited;
           }

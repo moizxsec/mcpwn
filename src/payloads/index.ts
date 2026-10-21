@@ -68,7 +68,7 @@ export function loadPayloads(name: string): string[] {
       throw new Error(`bundled payload library "${name}" is missing from the package`);
     }
     throw new Error(
-      `unknown payload library "${name}" — use a bundled name (${listPayloads().join(", ")}) ` +
+      `unknown payload library "${name}" - use a bundled name (${listPayloads().join(", ")}) ` +
         `or a path to a .txt wordlist`
     );
   }

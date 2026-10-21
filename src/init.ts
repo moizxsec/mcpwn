@@ -146,7 +146,7 @@ export async function runInit(argv: string[]): Promise<number> {
   }
 
   const out = process.stdout;
-  out.write("mcpwn init — onboarding\n\n");
+  out.write("mcpwn init - onboarding\n\n");
 
   // 1) Detect installed clients.
   const detected = detectClients();
@@ -187,7 +187,7 @@ export async function runInit(argv: string[]): Promise<number> {
           dryRun: true,
         });
         out.write(
-          `  wrap ${label} (${targetPath}) — would wrap: ${res.changed.join(", ") || "(nothing; already wrapped)"}\n`
+          `  wrap ${label} (${targetPath}) - would wrap: ${res.changed.join(", ") || "(nothing; already wrapped)"}\n`
         );
       } catch (err) {
         out.write(`  wrap ${label}: ${(err as Error).message}\n`);
@@ -195,12 +195,12 @@ export async function runInit(argv: string[]): Promise<number> {
     } else if (targetId && targetPath && !existsSync(targetPath)) {
       out.write(`  wrap ${label}: config not found at ${targetPath} (nothing to wrap)\n`);
     } else {
-      out.write("  wrap: no single client selected — pass --client <id> to choose one\n");
+      out.write("  wrap: no single client selected - pass --client <id> to choose one\n");
     }
     const cfgPath = join(args.dir, "mcpwn.config.json");
     const polPath = join(args.dir, "mcpwn.policy.json");
-    out.write(`  would write ${cfgPath}${existsSync(cfgPath) ? " (exists — kept)" : ""}\n`);
-    out.write(`  would write ${polPath}${existsSync(polPath) ? " (exists — kept)" : ""}\n`);
+    out.write(`  would write ${cfgPath}${existsSync(cfgPath) ? " (exists - kept)" : ""}\n`);
+    out.write(`  would write ${polPath}${existsSync(polPath) ? " (exists - kept)" : ""}\n`);
     return 0;
   }
 
@@ -214,18 +214,18 @@ export async function runInit(argv: string[]): Promise<number> {
         invocation: invocationFor(args),
       });
       if (res.changed.length) {
-        out.write(`Wrapped ${label} [${res.changed.join(", ")}] — backup at ${res.backupPath}\n`);
+        out.write(`Wrapped ${label} [${res.changed.join(", ")}] - backup at ${res.backupPath}\n`);
       } else {
-        out.write(`${label}: already wrapped — nothing to do\n`);
+        out.write(`${label}: already wrapped - nothing to do\n`);
       }
     } catch (err) {
       process.stderr.write(`mcpwn init: wrap failed: ${(err as Error).message}\n`);
       exit = 1;
     }
   } else if (targetId && targetPath && !existsSync(targetPath)) {
-    out.write(`${label}: config not found at ${targetPath} — skipping wrap\n`);
+    out.write(`${label}: config not found at ${targetPath} - skipping wrap\n`);
   } else if (!args.noWrap) {
-    out.write("No single client selected — skipping wrap (pass --client <id>)\n");
+    out.write("No single client selected - skipping wrap (pass --client <id>)\n");
   }
 
   // Starter files: write when absent (never clobber), or when forced.

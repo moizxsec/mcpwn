@@ -448,7 +448,7 @@ export function renderAdvisory(f: Finding, opts: AdvisoryOptions = {}, topLevel 
   const sub = topLevel ? "##" : "###";
   const lines: string[] = [];
 
-  lines.push(`${h} Security advisory — ${f.title}`);
+  lines.push(`${h} Security advisory - ${f.title}`);
   lines.push("");
   lines.push(`${sub} Summary`);
   lines.push("");
@@ -470,11 +470,11 @@ export function renderAdvisory(f: Finding, opts: AdvisoryOptions = {}, topLevel 
   if (a) {
     lines.push(`- **CVSS v3.1:** ${a.cvssScore} (${a.cvssSeverity})`);
     lines.push(`- **CVSS vector:** \`${a.cvssVector}\``);
-    lines.push(`- **CWE:** [${a.cwe}](${cweUrlFor(a.cwe)}) — ${a.cweName}`);
+    lines.push(`- **CWE:** [${a.cwe}](${cweUrlFor(a.cwe)}) - ${a.cweName}`);
     lines.push(`- **Attack class:** ${a.attackClass}`);
   } else {
     lines.push(
-      "- **CVSS v3.1 / CWE:** not mapped for this id (custom or unrecognised detector) — score manually."
+      "- **CVSS v3.1 / CWE:** not mapped for this id (custom or unrecognised detector) - score manually."
     );
   }
   lines.push("");
@@ -563,7 +563,7 @@ function impactText(f: Finding, a?: AdvisoryEntry): string {
     case "pin-drift":
       return "The server's advertised surface changed after the user approved it (rug pull): metadata the agent now sees differs from what was trusted.";
     case "provenance-taint":
-      return "Untrusted server output flows into a privileged tool call — an indirect prompt injection turned into a real action (injection -> action kill chain).";
+      return "Untrusted server output flows into a privileged tool call - an indirect prompt injection turned into a real action (injection -> action kill chain).";
     default:
       return a
         ? `See ${a.cwe} (${a.cweName}). ${a.cweName} in this surface lets a malicious MCP server subvert the agent or its host.`
@@ -586,7 +586,7 @@ export function renderAdvisorySet(findings: Finding[], opts: AdvisoryOptions = {
   const lines: string[] = [];
   lines.push("# mcpwn security advisories");
   lines.push("");
-  lines.push(`Generated ${iso(opts.generatedAt)} — ${sorted.length} finding(s).`);
+  lines.push(`Generated ${iso(opts.generatedAt)} - ${sorted.length} finding(s).`);
   if (opts.source) lines.push(`Source: \`${opts.source}\`.`);
   lines.push("");
 
@@ -600,8 +600,8 @@ export function renderAdvisorySet(findings: Finding[], opts: AdvisoryOptions = {
   lines.push("| --- | --- | --- | --- | --- |");
   for (const f of sorted) {
     const a = advisoryFor(f.id);
-    const cvss = a ? `${a.cvssScore} (${a.cvssSeverity})` : "—";
-    const cwe = a ? a.cwe : "—";
+    const cvss = a ? `${a.cvssScore} (${a.cvssSeverity})` : "-";
+    const cwe = a ? a.cwe : "-";
     lines.push(`| ${f.severity} | ${mdCell(f.id)} | ${cvss} | ${cwe} | ${mdCell(f.title)} |`);
   }
   lines.push("");

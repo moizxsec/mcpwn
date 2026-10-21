@@ -61,7 +61,7 @@ export class StdioTransport implements Transport {
       if (this.intercept.available()) {
         this.intercept.start();
       } else {
-        logger.info("interactive intercept requested but no /dev/tty — auto-forwarding");
+        logger.info("interactive intercept requested but no /dev/tty - auto-forwarding");
         this.intercept = undefined;
       }
     }

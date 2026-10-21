@@ -54,9 +54,9 @@ The concrete fix (e.g. "resolve with `fs.realpath` and check
 
 ## Disclosure timeline
 
-- YYYY-MM-DD — reported privately to maintainer
-- YYYY-MM-DD — fix released / 90-day window elapsed
-- YYYY-MM-DD — public disclosure
+- YYYY-MM-DD - reported privately to maintainer
+- YYYY-MM-DD - fix released / 90-day window elapsed
+- YYYY-MM-DD - public disclosure
 
 ## Credit
 

@@ -1,10 +1,10 @@
 ---
 title: What is mcpwn
-description: An intercepting man-in-the-middle proxy for the Model Context Protocol — watch every JSON-RPC message, and rewrite the tool results the server sends back to the agent. Burp Suite, but for AI agents.
+description: An intercepting man-in-the-middle proxy for the Model Context Protocol - watch every JSON-RPC message, and rewrite the tool results the server sends back to the agent. Burp Suite, but for AI agents.
 ---
 
 > **X-ray and tamper the traffic between an AI agent and its MCP servers.**
-> An intercepting man-in-the-middle proxy for the Model Context Protocol — watch
+> An intercepting man-in-the-middle proxy for the Model Context Protocol - watch
 > every JSON-RPC message, and rewrite the **tool results the server sends back
 > to the agent**. Burp Suite, but for AI agents.
 
@@ -18,10 +18,10 @@ to assess**.
 
 MCP is the wire connecting LLM agents (Claude Desktop, Cursor, Claude Code,
 Windsurf, custom agents) to tools, files, and data. It's being adopted
-everywhere — and almost all the security tooling for it is **static** (scan a
+everywhere, and almost all the security tooling for it is **static** (scan a
 config) or **automated** (fuzz a server, run a prompt list).
 
-There was no good **interactive** tool — the thing a pentester reaches for to
+There was no good **interactive** tool: the thing a pentester reaches for to
 sit in the middle of a live session, hold a message, hand-edit it, and watch
 what happens. mcpwn is that tool.
 
@@ -31,7 +31,7 @@ back." That is the attacker's real position, and it's where indirect prompt
 injection, tool poisoning, and confused-deputy attacks actually land.
 
 **Defensive purpose:** prove *your own* agent will exfiltrate data when a tool
-returns attacker-controlled text — before an attacker proves it for you.
+returns attacker-controlled text, before an attacker proves it for you.
 
 ## See it
 
@@ -68,10 +68,10 @@ mcpwn, with one command. No API key, no network.
 | **Rug pull** | Mutate a `tools/list` response mid-session so the live definition differs from what the user approved. |
 | **Confused deputy** | Coerce a privileged tool (e.g. `send_email`) to act on attacker intent. |
 | **Server-side input flaws** | Use mcpwn as the harness to craft path-traversal / SSRF / injection `tools/call` arguments. |
-| **Transport / auth gaps** | MCP defines no cryptographic client/server auth — mcpwn's MITM position is itself the finding. |
+| **Transport / auth gaps** | MCP defines no cryptographic client/server auth - mcpwn's MITM position is itself the finding. |
 
-The full catalogue — every class with its CWE, the mcpwn detector/template/dvmcp
-server that covers it, and the fix — lives in the
+The full catalogue - every class with its CWE, the mcpwn detector/template/dvmcp
+server that covers it, and the fix - lives in the
 [MCP threat taxonomy](/mcpwn/threats/).
 
 ## How it works
@@ -91,5 +91,5 @@ client's requests (`tools/call`, `tools/list`, …) and the server's own request
 (`sampling/createMessage`, `roots/list`, `elicitation/create`) are both tracked,
 keyed by `(direction, id)` so their independent id-spaces never collide. Rules
 run against the result; the message is forwarded as-is, rewritten, or dropped.
-Anything that can't be parsed is relayed opaquely — mcpwn never blocks or
+Anything that can't be parsed is relayed opaquely - mcpwn never blocks or
 mangles the wire.

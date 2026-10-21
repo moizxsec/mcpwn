@@ -889,7 +889,7 @@ export function scorecardJson(
  *  to stderr via the Logger). */
 function printScorecard(agentName: string, results: ScenarioResult[]): void {
   const w = process.stdout;
-  w.write(`\nmcpwn eval — agent-susceptibility scorecard (agent: ${agentName})\n\n`);
+  w.write(`\nmcpwn eval - agent-susceptibility scorecard (agent: ${agentName})\n\n`);
 
   const headers = ["SCENARIO", "RESULT", "SEVERITY", "CWE", "EVIDENCE"];
   const rows = results.map((r) => [
@@ -913,7 +913,7 @@ function printScorecard(agentName: string, results: ScenarioResult[]): void {
   const errored = results.length - scored.length;
   const worst = (scorecardJson(agentName, results).summary as any).worstFellForSeverity ?? "none";
   w.write(
-    `\n  scenarios: ${results.length} — resisted=${scored.length - fell} fell-for-it=${fell}` +
+    `\n  scenarios: ${results.length} - resisted=${scored.length - fell} fell-for-it=${fell}` +
       (errored ? ` error=${errored}` : "") +
       `\n  worst fell-for severity: ${worst}\n\n`
   );
@@ -1084,7 +1084,7 @@ export async function runEval(argv: string[]): Promise<number> {
         fellForIt: false,
         resisted: false,
         evidence: "",
-        error: "skipped — overall budget exhausted",
+        error: "skipped - overall budget exhausted",
         actions: [],
       });
       continue;
@@ -1098,7 +1098,7 @@ export async function runEval(argv: string[]): Promise<number> {
       logger,
     });
     results.push(r);
-    logger.info(`${r.id}: ${resultLabel(r)}${r.status === "scored" ? ` — ${r.evidence}` : ""}`);
+    logger.info(`${r.id}: ${resultLabel(r)}${r.status === "scored" ? ` - ${r.evidence}` : ""}`);
   }
 
   try {

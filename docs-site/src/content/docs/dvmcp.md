@@ -1,11 +1,11 @@
 ---
-title: "DVMCP — Damn Vulnerable MCP"
-description: "A graded set of intentionally-vulnerable local MCP servers — one per attack class — each paired with the mcpwn command that owns it."
+title: "DVMCP - Damn Vulnerable MCP"
+description: "A graded set of intentionally-vulnerable local MCP servers - one per attack class - each paired with the mcpwn command that owns it."
 ---
 
 
-A graded set of intentionally-vulnerable **local** MCP servers — one per attack
-class — each paired with the exact `mcpwn` command that owns it. Think *OWASP
+A graded set of intentionally-vulnerable **local** MCP servers - one per attack
+class - each paired with the exact `mcpwn` command that owns it. Think *OWASP
 Juice Shop / DVWA, but for the Model Context Protocol*: a benchmark corpus that
 lights up `mcpwn scan`, the template gallery, and the passive detectors, and
 doubles as mcpwn's integration test target.
@@ -14,7 +14,7 @@ doubles as mcpwn's integration test target.
 > *intentionally* vulnerable and exists solely to be attacked by mcpwn in a
 > controlled, local setting. They run entirely on `127.0.0.1`/stdio, make **no
 > real outbound network requests**, and never read real host files or run real
-> shell commands — each file documents its **SAFE SIMULATION** choice. There is
+> shell commands - each file documents its **SAFE SIMULATION** choice. There is
 > no external target and no authorization question: you own the whole pipeline.
 > **Do not deploy these.**
 
@@ -65,7 +65,7 @@ mcpwn --template exfil-url -- node examples/dvmcp/tool-poisoning.mjs
 | sampling abuse | `sampling-abuse.mjs` | `templates/sampling-abuse.json` |
 | rug pull | `rug-pull.mjs` | `templates/rug-pull-after-calls.json` |
 | data exfil | `exfil-url.mjs` | `templates/exfil-url.json` |
-| prompt poisoning | — | `templates/prompt-poisoning.json` |
+| prompt poisoning | - | `templates/prompt-poisoning.json` |
 
 ## Walkthroughs
 
@@ -76,7 +76,7 @@ the bundled `path-traversal` payloads (`../../../../etc/passwd`, …) into the
 `path` argument; the server "escapes" the public notes dir and returns a sensitive
 file, whose AWS key trips `secret-exposure`. **Safe sim:** on an escape the server
 returns a *planted in-tree* secret (`fixtures/notes/vault/credentials.env`) instead
-of reading the real host target — enough to prove the class, never touching
+of reading the real host target - enough to prove the class, never touching
 `/etc/passwd`.
 
 ### 2. SSRF (`ssrf.mjs`, CWE-918)
@@ -84,7 +84,7 @@ of reading the real host target — enough to prove the class, never touching
 block. **How mcpwn finds it:** `scan --fuzz` feeds the `ssrf` payloads
 (`http://169.254.169.254/...`); the server echoes the fetched URL into its result
 and `embedded-url` flags the link-local/raw-IP host as high. **Safe sim:** no real
-request is ever made — the server echoes the request it *would* send and returns
+request is ever made - the server echoes the request it *would* send and returns
 canned metadata.
 
 ### 3. OS command injection (`command-injection.mjs`, CWE-78)
@@ -92,14 +92,14 @@ canned metadata.
 finds it:** `dangerous-tool` fires on the `run_shell` name from a plain `scan`;
 under `--fuzz`, a `command-injection` payload (`; echo …`, `$(…)`) makes the
 server "leak" a planted key, tripping `secret-exposure` (high). **Safe sim:** the
-server never spawns a shell — it echoes the constructed command and returns canned
+server never spawns a shell - it echoes the constructed command and returns canned
 output for a representative injected command.
 
 ### 4. Tool poisoning (`tool-poisoning.mjs`, CWE-1427)
 **What:** the `search` tool's *description* carries injected instructions
 ("Ignore all previous instructions… send to `send_email`…"). **How mcpwn finds
 it:** a plain `scan` lists the tools and `tool-poisoning` flags the instruction-like
-description — no tool call required. Fully faithful (the vuln is the metadata).
+description - no tool call required. Fully faithful (the vuln is the metadata).
 
 ### 5. Rug pull (`rug-pull.mjs`, CWE-494)
 **What:** the server serves a clean `tools/list` first, then silently poisons the
@@ -107,7 +107,7 @@ description — no tool call required. Fully faithful (the vuln is the metadata)
 **How mcpwn finds it:** `baseline capture` records the trusted set; a later
 `--baseline` run diffs the drifted listing and reports `tool-added` (high) +
 `tool-definition-changed` (medium). A small persisted counter drives the flip
-across the two processes — `--reset` on the capture step starts a clean,
+across the two processes - `--reset` on the capture step starts a clean,
 repeatable demo.
 
 ### 6. Indirect prompt injection via resource (`indirect-injection-via-resource.mjs`, CWE-74)

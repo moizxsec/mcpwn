@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Wrap a stdio MCP server, watch its traffic, tamper it headlessly, and run the self-driving scanner — the four commands you reach for first.
+description: Wrap a stdio MCP server, watch its traffic, tamper it headlessly, and run the self-driving scanner - the four commands you reach for first.
 ---
 
 mcpwn wraps a **stdio** MCP server: the host launches mcpwn, mcpwn launches the
@@ -41,7 +41,7 @@ npm run dvmcp    # the Damn-Vulnerable MCP scoreboard
 
 ## Where to next
 
-- [Intercept proxy](/mcpwn/guides/proxy/) — the Repeater loop, detectors, scope.
-- [Tamper rules](/mcpwn/guides/tamper-rules/) — the JSON rule format and actions.
-- [Active scan](/mcpwn/guides/scan/) — the agent-free scanner and templates.
-- [Auditing playbook](/mcpwn/guides/auditing/) — threat class → concrete workflow.
+- [Intercept proxy](/mcpwn/guides/proxy/) - the Repeater loop, detectors, scope.
+- [Tamper rules](/mcpwn/guides/tamper-rules/) - the JSON rule format and actions.
+- [Active scan](/mcpwn/guides/scan/) - the agent-free scanner and templates.
+- [Auditing playbook](/mcpwn/guides/auditing/) - threat class → concrete workflow.

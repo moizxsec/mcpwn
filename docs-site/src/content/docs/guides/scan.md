@@ -1,9 +1,9 @@
 ---
 title: Active scan
-description: The self-driving, agent-free scanner — paginated enumeration, content sampling, optional fuzzing, and a CI fail-on gate emitting JSON / Markdown / SARIF.
+description: The self-driving, agent-free scanner - paginated enumeration, content sampling, optional fuzzing, and a CI fail-on gate emitting JSON / Markdown / SARIF.
 ---
 
-Beyond the live proxy, mcpwn ships a self-driving scanner — no agent in the
+Beyond the live proxy, mcpwn ships a self-driving scanner - no agent in the
 loop. It drives the handshake, enumerates every surface (tools / resources /
 prompts, paginated), samples content, runs all passive detectors, and fails CI
 on findings.

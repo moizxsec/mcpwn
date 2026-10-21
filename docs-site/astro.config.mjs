@@ -23,10 +23,10 @@ export default defineConfig({
     starlight({
       title: "mcpwn",
       description:
-        "Intercept & tamper proxy for MCP traffic — X-ray and tamper the JSON-RPC between an AI agent and its MCP servers. Burp Suite for AI agents. Authorized testing only.",
+        "Intercept & tamper proxy for MCP traffic: X-ray and tamper the JSON-RPC between an AI agent and its MCP servers. Burp Suite for AI agents. Authorized testing only.",
       // Dark-first: default to dark, light theme derived in theme.css. The
       // `mcpwn▮` wordmark is the title string styled in theme.css (mono font +
-      // block cursor) — a real font beats an SVG with un-embedded text.
+      // block cursor) - a real font beats an SVG with un-embedded text.
       favicon: "/favicon.svg",
       social: [
         {

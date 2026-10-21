@@ -99,7 +99,7 @@ export function parseConformanceArgs(argv: string[]): ConformanceArgs {
       default:
         if (a.startsWith("-")) {
           throw new ConformanceArgError(
-            `unknown option "${a}" — put the server command (and its flags) after "--"`
+            `unknown option "${a}" - put the server command (and its flags) after "--"`
           );
         }
         out.command = a;
@@ -581,7 +581,7 @@ async function runChecks(
     add(
       "no-reply-to-notification",
       "fail",
-      "server replied to a notification (which has no id) — response confusion"
+      "server replied to a notification (which has no id) - response confusion"
     );
     findings.add({
       id: "jsonrpc-response-confusion",
@@ -676,7 +676,7 @@ async function runChecks(
       add(
         "stdout-clean",
         "fail",
-        `${bad.length} non-JSON-RPC line(s) on stdout — e.g. ${JSON.stringify(bad[0].slice(0, 80))}`
+        `${bad.length} non-JSON-RPC line(s) on stdout - e.g. ${JSON.stringify(bad[0].slice(0, 80))}`
       );
       findings.add({
         id: "stdio-non-jsonrpc-output",
@@ -737,7 +737,7 @@ export async function runConformance(argv: string[]): Promise<number> {
   }
   if (!args.http && !args.command) {
     process.stderr.write(
-      'mcpwn conformance: missing target — give --http <url> or a server command after "--"\n'
+      'mcpwn conformance: missing target - give --http <url> or a server command after "--"\n'
     );
     return 2;
   }

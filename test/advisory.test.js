@@ -104,7 +104,7 @@ test("renderAdvisory fills CVSS vector + CWE for a mapped finding", () => {
     ts: 1000,
   };
   const md = renderAdvisory(f);
-  assert.match(md, /# Security advisory —/);
+  assert.match(md, /# Security advisory -/);
   assert.match(md, /\*\*CVSS v3\.1:\*\* 8\.2 \(High\)/);
   assert.match(md, /CVSS:3\.1\/AV:N\/AC:L\/PR:N\/UI:R\/S:C\/C:L\/I:H\/A:N/);
   assert.match(md, /CWE-1427/);
@@ -122,7 +122,7 @@ test("renderAdvisory degrades gracefully for an unmapped id", () => {
   const f = { id: "custom-detector-xyz", title: "Something custom", severity: "medium" };
   assert.equal(advisoryFor(f.id), undefined, "unknown id has no mapping");
   const md = renderAdvisory(f); // must not throw
-  assert.match(md, /# Security advisory — Something custom/);
+  assert.match(md, /# Security advisory - Something custom/);
   assert.match(md, /not mapped for this id/);
   assert.doesNotMatch(md, /CWE-\d+/, "no fabricated CWE for an unmapped id");
 });
@@ -143,7 +143,7 @@ test("renderAdvisorySet builds a combined doc with a CVSS/CWE summary table", ()
   // Mapped rows show CVSS + CWE; the unmapped row degrades to a dash.
   assert.match(doc, /CWE-200/);
   assert.match(doc, /CWE-1427/);
-  assert.match(doc, /\| low \| custom-xyz \| — \| — \|/);
+  assert.match(doc, /\| low \| custom-xyz \| - \| - \|/);
 });
 
 test("renderAdvisorySet with no findings is still valid", () => {

@@ -31,4 +31,4 @@ If you use mcpwn to find a vulnerability in a third-party MCP server or agent:
 mcpwn keeps all captured traffic **local**. It has **no telemetry** and makes
 **no outbound network connections** of its own. Session logs (`--log`) are
 written only to the path you specify and may contain secrets observed on the
-wire — treat them accordingly.
+wire - treat them accordingly.

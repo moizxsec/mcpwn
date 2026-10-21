@@ -51,7 +51,7 @@ import { runBadge } from "./badge.js";
 import { runMan } from "./manpage.js";
 import { runEval } from "./eval.js"; // Phase 11: agent-susceptibility eval harness
 
-const HELP = `mcpwn — intercept & tamper proxy for MCP traffic
+const HELP = `mcpwn - intercept & tamper proxy for MCP traffic
 
   X-ray and tamper the JSON-RPC between an AI agent and its MCP servers.
   Burp Suite for AI agents. AUTHORIZED TESTING ONLY.
@@ -81,7 +81,7 @@ USAGE
 OPTIONS
   -i, --intercept       Interactively hold each message for review
                         (forward / drop / edit / tamper). Needs a terminal.
-                        (stdio only — disabled for HTTP in v2.)
+                        (stdio only - disabled for HTTP in v2.)
   -r, --rule <file>     Load a JSON tamper-rule file (repeatable).
       --template <id>   Load a bundled community template by id as a rule-pack
                         (repeatable; see "mcpwn templates list").
@@ -90,13 +90,13 @@ OPTIONS
   -h, --help            Show this help.
       --version         Print version.
 
-CONFIG (§3.13 — commit a baseline invocation; CLI flags still override it)
+CONFIG (§3.13 - commit a baseline invocation; CLI flags still override it)
       --config <file>   Load a mcpwn.config.json (rules, scope, redact, findings
                         output, fail-on). Precedence: defaults < config < flags.
       --no-auto-config  Do NOT auto-load ./mcpwn.config.json (it is loaded by
                         default, with a notice, when present in the cwd).
 
-PLUGINS (§3.11 — extensibility; TRUST MODEL below)
+PLUGINS (§3.11 - extensibility; TRUST MODEL below)
       --detector <file.mjs>     Load a custom passive detector (repeatable).
       --rule-plugin <file.mjs>  Load a custom tamper-action handler whose "kind"
                                 rule files may then reference (repeatable).
@@ -121,17 +121,17 @@ DETECTION & REPORTING (§3.4, §3.5, §3.9)
       --redact               Mask built-in secret patterns in stderr + JSONL.
       --redact-file <file>   Add redaction patterns (label=regex per line).
 
-GUARD / BLUE-TEAM (§3.14 — the defensive inverse of the tamper proxy)
+GUARD / BLUE-TEAM (§3.14 - the defensive inverse of the tamper proxy)
       --guard                Run as a protective FIREWALL: sanitise/block
                              injection, secrets, exfil URLs and invisible-unicode
                              in agent-bound content before the agent sees it.
                              (This is the one mode where mcpwn may drop a message;
-                             it fails OPEN — a guard error forwards the original.)
+                             it fails OPEN - a guard error forwards the original.)
       --policy <file>        Guard policy (mcpwn.policy.json). Implies --guard.
                              Defaults to ./mcpwn.policy.json, else a built-in
                              policy that sanitises the high-severity classes.
 
-SCOPING (§3.6 — out-of-scope traffic is forwarded untouched + hidden)
+SCOPING (§3.6 - out-of-scope traffic is forwarded untouched + hidden)
       --scope-method <glob>   Only methods matching this glob (repeatable).
       --scope-tool <name>     Only tools/call for this tool name (repeatable).
       --scope-direction c2s|s2c   Only this direction.
@@ -154,7 +154,7 @@ SUBCOMMANDS
   replay <session.jsonl> -- <cmd>   Replay recorded client->server traffic
                                     through a fresh server (rules apply).
                                     Flags: -r, -l, -v, --only-method, --repeat <n>
-  scan [options] -- <cmd>           Self-driving active scanner — NO agent in the
+  scan [options] -- <cmd>           Self-driving active scanner - NO agent in the
   scan --http <url> [options]       loop. Drives the handshake, enumerates every
                                     surface (tools/resources/prompts, paginated),
                                     samples resource/prompt content and runs all
@@ -200,7 +200,7 @@ SUBCOMMANDS
                                     --agent mock (default; naive follower, no API
                                     key, no network) or --agent command with
                                     --agent-cmd "<cmd>" (JSON task spec on stdin,
-                                    JSON action on stdout — mcpwn never reads keys).
+                                    JSON action on stdout - mcpwn never reads keys).
                                     Flags: --mock follow|resist, --scenario <id>
                                     (repeatable), --out <file> (JSON scorecard),
                                     --fail-on-any, --fail-on <sev> (default high),
@@ -212,7 +212,7 @@ SUBCOMMANDS
                                     findings dir) into a SINGLE self-contained,
                                     zero-dependency HTML advisory: header + stats,
                                     findings by severity, session timeline, and
-                                    side-by-side tamper diffs. A static file — no
+                                    side-by-side tamper diffs. A static file - no
                                     live server. Omit -o to write to stdout.
   advisory <findings-dir|findings.json> [-o <dir|file.md>] [--session <jsonl>]
                                     Turn findings into filled CVSS v3.1 + CWE
@@ -289,7 +289,7 @@ EXAMPLES
   mcpwn http --listen 127.0.0.1:8900 --upstream https://mcp.example.com/mcp \\
     -r attack.json --findings-out ./out
 
-CONFIG (in your MCP client) — wrap the existing command:
+CONFIG (in your MCP client) - wrap the existing command:
   before:  { "command": "npx", "args": ["-y", "@some/server"] }
   after:   { "command": "mcpwn", "args": ["--", "npx", "-y", "@some/server"] }
 `;
@@ -518,7 +518,7 @@ export function parseArgs(
     // `--foo` is almost always a typo or a misplaced server flag.
     if (a.startsWith("-")) {
       throw new ArgError(
-        `unknown option "${a}" — put the server command (and its flags) after "--"`
+        `unknown option "${a}" - put the server command (and its flags) after "--"`
       );
     }
     // First non-flag before `--` is treated as the command start.
@@ -917,7 +917,7 @@ function loadAllRules(a: SharedArgs, logger: Logger, actionKinds: string[]): Rul
   for (const id of a.templateIds) {
     const tmpl = findTemplate(id);
     if (!tmpl) {
-      logger.error(`unknown template "${id}" — run "mcpwn templates list" to see available ids`);
+      logger.error(`unknown template "${id}" - run "mcpwn templates list" to see available ids`);
       process.exit(2);
     }
     rules = rules.concat(tmpl.rules);
@@ -947,7 +947,7 @@ async function loadPlugins(a: SharedArgs, logger: Logger): Promise<LoadedPlugins
       process.exit(2);
     }
     logger.info(
-      `detector plugin loaded: ${d.name} <- ${p} (runs local code — trusted sources only)`
+      `detector plugin loaded: ${d.name} <- ${p} (runs local code - trusted sources only)`
     );
     detectors.push(d);
   }
@@ -961,7 +961,7 @@ async function loadPlugins(a: SharedArgs, logger: Logger): Promise<LoadedPlugins
       process.exit(2);
     }
     logger.info(
-      `rule-plugin loaded: kind "${rp.kind}" <- ${p} (runs local code — trusted sources only)`
+      `rule-plugin loaded: kind "${rp.kind}" <- ${p} (runs local code - trusted sources only)`
     );
     actions.push(rp);
   }
@@ -995,7 +995,7 @@ function buildGuard(a: SharedArgs, logger: Logger, sink?: FindingsSink): GuardEn
     throw new PolicyError((err as Error).message);
   }
   logger.info(
-    `guard mode ON — firewall policy: ${policy.name ?? "(unnamed)"} [${src}]; ` +
+    `guard mode ON - firewall policy: ${policy.name ?? "(unnamed)"} [${src}]; ` +
       `${policy.rules.length} rule(s). Malicious content will be sanitised/blocked before the agent sees it.`
   );
   return new GuardEngine(policy, sink);
@@ -1037,7 +1037,7 @@ async function runHttp(argv: string[]): Promise<number> {
   const logger = new Logger({ logFile: parsed.logFile, verbose: parsed.verbose, redactPatterns });
   if (configNotice) logger.info(configNotice);
   if (parsed.interceptRequested) {
-    logger.info("interactive intercept (-i) is disabled for HTTP in v2 — ignoring");
+    logger.info("interactive intercept (-i) is disabled for HTTP in v2 - ignoring");
   }
 
   const plugins = await loadPlugins(parsed, logger);

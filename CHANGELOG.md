@@ -4,6 +4,50 @@ All notable changes to this project are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-21
+
+Turns mcpwn from a tamper proxy into a full MCP security platform — offensive
+and defensive — while keeping **zero runtime dependencies** and every
+never-block-the-wire / detectors-read-only / out-of-scope-untouched invariant
+intact.
+
+### Added
+
+- **Full protocol tampering**: new rule actions `injectResource`
+  (`resources/read`), `poisonPrompt` (`prompts/get`) and `tamperSampling`
+  (`sampling/createMessage`), plus stateful/conditional rules (`afterCalls:N`
+  for a true rug-pull, `when.contains`).
+- **Four passive detectors**: invisible/zero-width unicode, embedded/exfil-URL,
+  tool-shadowing, and annotation-mismatch; the secret and injection linters now
+  scan all agent-bound text (results, resources, prompt/sampling messages).
+- **`mcpwn scan`** — self-driving active scanner (no agent in the loop):
+  handshake, enumerate tools/resources/prompts, run detectors, optional
+  schema-aware `--fuzz`, findings + CI exit code; stdio and `--http`.
+- **`mcpwn report`** — single self-contained, XSS-safe HTML advisory with
+  side-by-side original-vs-tampered diffs.
+- **Plugins + templates**: `--detector` / `--rule-plugin` loaders and a
+  nuclei-style `templates/` gallery (`templates list|show|lint`, `--template`).
+- **Damn-Vulnerable-MCP suite** (`examples/dvmcp/`): eight graded vulnerable
+  servers + scoreboard, doubling as the integration corpus.
+- **Guard mode** (`--guard` / `--policy`): a fail-open firewall that
+  sanitises/blocks injection, secrets, exfil URLs and invisible unicode before
+  the agent sees them, driven by `mcpwn.policy.json`.
+- **Rug-pull pinning** (`pin capture` + `--pin` → `mcpwn.lock`) and
+  **provenance taint** (`--taint`, injection→action kill-chain).
+- **`mcpwn diff`** (differential replay vs a golden session) and
+  **`mcpwn conformance`** (MCP spec checks; violations become findings).
+- **`mcpwn eval`** — agent-susceptibility harness (mock + command adapters;
+  deterministic scorecard; mcpwn never reads API keys).
+- **`mcpwn advisory`** — GHSA-style CVSS v3.1 + CWE advisories; `docs/THREATS.md`
+  threat taxonomy; CWE/CVSS enriched into SARIF + the HTML report.
+- **Distribution**: `wrap`/`unwrap` (claude-desktop/cursor/cline/vscode/
+  windsurf), `init` wizard, shell completions, man page, Dockerfile, a composite
+  **GitHub Action** (scan → SARIF to the Security tab), and SVG scan badges.
+- **Docs site**: an Astro + Starlight documentation site deployed to GitHub
+  Pages (bespoke landing + guides + generated template gallery + TypeDoc `/api`).
+- **Config file** (`mcpwn.config.json`), stable SARIF `partialFingerprints`,
+  bounded correlator TTL/LRU, and an end-of-session summary.
+
 ## [0.2.0] - 2026-10-19
 
 A large release taking mcpwn from a stdio-only tamper proxy to a multi-transport

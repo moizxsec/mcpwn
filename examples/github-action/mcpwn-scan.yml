@@ -28,7 +28,7 @@ jobs:
       # - run: npm ci && npm run build
 
       - name: Scan the MCP server
-        uses: moizxsec/mcpwn@main # or a pinned release tag
+        uses: moizxsec/mcpwn@v1 # or pin an exact release, e.g. @v0.3.0
         with:
           server-command: "node ./my-server.js"
           # http-url: "https://mcp.example.com/mcp"   # ...or scan a remote server
